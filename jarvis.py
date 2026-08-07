@@ -716,44 +716,6 @@ def open_claude_in_chrome() -> None:
         win32_post_fullscreen_monitor=post_mon,
         user_data_dir=user_data,
     )
-
-
-# def open_binance_btc_in_chrome() -> None:
-#     if not OPEN_BINANCE_BTC_IN_CHROME:
-#         return
-#     url = (
-#         os.environ.get("BINANCE_BTC_URL")
-#         or "https://www.binance.com/en/trade/BTC_USDT"
-#     ).strip()
-#     pos: tuple[int, int] | None = None
-#     size: tuple[int, int] | None = None
-#     fs = OPEN_CHROME_FULLSCREEN
-#     post_mon: int | None = None
-#     user_data: str | None = None
-#     if sys.platform == "win32":
-#         post_mon = BINANCE_CHROME_MONITOR
-#         pos = _chrome_monitor_top_left(BINANCE_CHROME_MONITOR)
-#         if fs:
-#             size = _chrome_monitor_pixel_size(BINANCE_CHROME_MONITOR)
-#         else:
-#             size = _chrome_window_size()
-#         if CHROME_SEPARATE_SITE_PROFILES:
-#             user_data = _chrome_site_user_data_dir("binance")
-#     elif not fs:
-#         size = _chrome_window_size()
-#     else:
-#         size = None
-#     _open_url_in_chrome(
-#         url,
-#         new_window=True,
-#         label="Binance BTC",
-#         window_position=pos,
-#         window_size=size,
-#         fullscreen=fs,
-#         win32_post_fullscreen_monitor=post_mon,
-#         user_data_dir=user_data,
-#     )
-
 def open_technirvana_portal_in_chrome() -> None:
     if not OPEN_TECHNIRVANA_PORTAL_IN_CHROME:
         return
@@ -995,17 +957,6 @@ def main() -> int:
             CLAUDE_CHROME_MONITOR,
             cu,
         )
-    # if OPEN_BINANCE_BTC_IN_CHROME:
-    #     bu = (
-    #         os.environ.get("BINANCE_BTC_URL")
-    #         or "https://www.binance.com/en/trade/BTC_USDT"
-    #     ).strip()
-    #     log.info(
-    #         "After Spotify, open Binance BTC in Chrome%s on monitor %d: %s",
-    #         " fullscreen" if OPEN_CHROME_FULLSCREEN else "",
-    #         BINANCE_CHROME_MONITOR,
-    #         bu,
-    #     )
     if OPEN_TECHNIRVANA_PORTAL_IN_CHROME:
       portal_url = (
           os.environ.get("TECHNIRVANA_PORTAL_URL")
