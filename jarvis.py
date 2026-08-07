@@ -75,7 +75,7 @@ INPUT_SILENT_RMS = 0.001
 
 # Spotify: "spotify:track:TRACK_ID" or https://open.spotify.com/track/...
 # YouTube: https://www.youtube.com/watch?v=...
-SONG_URI = "https://open.spotify.com/track/39shmbIHICJ2Wxnk1fPSdz?si=2900c75c2e2d4b82"
+SONG_URI = "https://open.spotify.com/track/7bxaFZ1O3cHkgLKMsdC3xR?si=89c979b7da714615"
 
 # Cursor: focus existing instance (no -n). Set OPEN_NEW_CURSOR_ON_DOUBLE_CLAP for a new window as well.
 FOCUS_EXISTING_CURSOR_ON_DOUBLE_CLAP = True
@@ -84,13 +84,13 @@ CURSOR_OPEN_FULLSCREEN = True
 
 # Google Chrome (fallback: default browser). URLs overridable in .env.
 OPEN_CLAUDE_CODE_IN_CHROME = True
-OPEN_BINANCE_BTC_IN_CHROME = True
+OPEN_TECHNIRVANA_PORTAL_IN_CHROME = True
 OPEN_CHROME_FULLSCREEN = True
 # False = default Chrome profile (your normal user, extensions, cookies). True = temp dirs under %TEMP% per site.
 CHROME_SEPARATE_SITE_PROFILES = False
 # Which physical screen (1 = leftmost/top-first after sorting). Windows only; ignored elsewhere.
 CLAUDE_CHROME_MONITOR = 1
-BINANCE_CHROME_MONITOR = 3
+TECHNIRVANA_CHROME_MONITOR = 1  # or your desired monitor number
 
 JARVIS_WELCOME_ENABLED = True
 JARVIS_WELCOME_PHRASE = (
@@ -102,7 +102,7 @@ JARVIS_WELCOME_PHRASE = (
 # Seconds after launching SONG_URI before speaking (gives Spotify/browser time to start).
 JARVIS_AFTER_SONG_DELAY_S = 1.0
 # Save ElevenLabs PCM as WAV under .cache/jarvis_welcome/; replay skips the API when the key matches.
-JARVIS_WELCOME_CACHE_ENABLED = True
+JARVIS_WELCOME_CACHE_ENABLED = False
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
@@ -326,6 +326,7 @@ def _save_pcm_wav_file(path: Path, pcm_bytes: bytes, sample_rate: int) -> None:
 
 
 def say_jarvis_welcome() -> None:
+    log.info("Jarvis Welcome Started")
     if not JARVIS_WELCOME_ENABLED or not JARVIS_WELCOME_PHRASE.strip():
         return
     text = JARVIS_WELCOME_PHRASE.strip()
@@ -716,37 +717,43 @@ def open_claude_in_chrome() -> None:
         win32_post_fullscreen_monitor=post_mon,
         user_data_dir=user_data,
     )
-
-
-def open_binance_btc_in_chrome() -> None:
-    if not OPEN_BINANCE_BTC_IN_CHROME:
+def open_technirvana_portal_in_chrome() -> None:
+    if not OPEN_TECHNIRVANA_PORTAL_IN_CHROME:
         return
+
     url = (
-        os.environ.get("BINANCE_BTC_URL")
-        or "https://www.binance.com/en/trade/BTC_USDT"
+        os.environ.get("TECHNIRVANA_PORTAL_URL")
+        or "https://thetechnirvana.in"
     ).strip()
+
     pos: tuple[int, int] | None = None
     size: tuple[int, int] | None = None
+
     fs = OPEN_CHROME_FULLSCREEN
     post_mon: int | None = None
     user_data: str | None = None
+
     if sys.platform == "win32":
-        post_mon = BINANCE_CHROME_MONITOR
-        pos = _chrome_monitor_top_left(BINANCE_CHROME_MONITOR)
+        post_mon = TECHNIRVANA_CHROME_MONITOR
+        pos = _chrome_monitor_top_left(TECHNIRVANA_CHROME_MONITOR)
+
         if fs:
-            size = _chrome_monitor_pixel_size(BINANCE_CHROME_MONITOR)
+            size = _chrome_monitor_pixel_size(TECHNIRVANA_CHROME_MONITOR)
         else:
             size = _chrome_window_size()
+
         if CHROME_SEPARATE_SITE_PROFILES:
-            user_data = _chrome_site_user_data_dir("binance")
+            user_data = _chrome_site_user_data_dir("technirvana")
+
     elif not fs:
         size = _chrome_window_size()
     else:
         size = None
+
     _open_url_in_chrome(
         url,
         new_window=True,
-        label="Binance BTC",
+        label="TechNirvana Portal",
         window_position=pos,
         window_size=size,
         fullscreen=fs,
@@ -866,7 +873,7 @@ def run_double_clap_actions() -> None:
     """Run outside the mic loop so sleeps do not stall capture."""
     play_song(SONG_URI)
     open_claude_in_chrome()
-    open_binance_btc_in_chrome()
+    open_technirvana_portal_in_chrome()
     if JARVIS_WELCOME_ENABLED and JARVIS_WELCOME_PHRASE.strip():
         delay = max(0.0, JARVIS_AFTER_SONG_DELAY_S)
         if delay:
@@ -951,17 +958,17 @@ def main() -> int:
             CLAUDE_CHROME_MONITOR,
             cu,
         )
-    if OPEN_BINANCE_BTC_IN_CHROME:
-        bu = (
-            os.environ.get("BINANCE_BTC_URL")
-            or "https://www.binance.com/en/trade/BTC_USDT"
-        ).strip()
-        log.info(
-            "After Spotify, open Binance BTC in Chrome%s on monitor %d: %s",
-            " fullscreen" if OPEN_CHROME_FULLSCREEN else "",
-            BINANCE_CHROME_MONITOR,
-            bu,
-        )
+    if OPEN_TECHNIRVANA_PORTAL_IN_CHROME:
+      portal_url = (
+          os.environ.get("TECHNIRVANA_PORTAL_URL")
+          or "https://thetechnirvana.in"
+      ).strip()
+      log.info(  
+          "After Spotify, open TechNirvana Portal in Chrome%s on monitor %d: %s",
+          " fullscreen" if OPEN_CHROME_FULLSCREEN else "",
+          TECHNIRVANA_CHROME_MONITOR,
+          portal_url,
+      )
     if JARVIS_WELCOME_ENABLED:
         ev, em, ef, er = elevenlabs_env_config()
         log.info(
