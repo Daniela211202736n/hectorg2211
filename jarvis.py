@@ -75,7 +75,7 @@ INPUT_SILENT_RMS = 0.001
 
 # Spotify: "spotify:track:TRACK_ID" or https://open.spotify.com/track/...
 # YouTube: https://www.youtube.com/watch?v=...
-SONG_URI = "https://open.spotify.com/track/01aTsQoKoeXofSTvKuunzv?si=495f6c0070df44b4"
+SONG_URI = "https://open.spotify.com/track/7bxaFZ1O3cHkgLKMsdC3xR?si=89c979b7da714615"
 
 # Cursor: focus existing instance (no -n). Set OPEN_NEW_CURSOR_ON_DOUBLE_CLAP for a new window as well.
 FOCUS_EXISTING_CURSOR_ON_DOUBLE_CLAP = True
@@ -102,7 +102,7 @@ JARVIS_WELCOME_PHRASE = (
 # Seconds after launching SONG_URI before speaking (gives Spotify/browser time to start).
 JARVIS_AFTER_SONG_DELAY_S = 1.0
 # Save ElevenLabs PCM as WAV under .cache/jarvis_welcome/; replay skips the API when the key matches.
-JARVIS_WELCOME_CACHE_ENABLED = True
+JARVIS_WELCOME_CACHE_ENABLED = False
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
@@ -326,6 +326,7 @@ def _save_pcm_wav_file(path: Path, pcm_bytes: bytes, sample_rate: int) -> None:
 
 
 def say_jarvis_welcome() -> None:
+    log.info("Jarvis Welcome Started")
     if not JARVIS_WELCOME_ENABLED or not JARVIS_WELCOME_PHRASE.strip():
         return
     text = JARVIS_WELCOME_PHRASE.strip()
