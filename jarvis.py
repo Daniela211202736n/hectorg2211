@@ -75,7 +75,7 @@ INPUT_SILENT_RMS = 0.001
 
 # Spotify: "spotify:track:TRACK_ID" or https://open.spotify.com/track/...
 # YouTube: https://www.youtube.com/watch?v=...
-SONG_URI = "https://open.spotify.com/track/39shmbIHICJ2Wxnk1fPSdz?si=2900c75c2e2d4b82"
+SONG_URI = "https://open.spotify.com/track/01aTsQoKoeXofSTvKuunzv?si=495f6c0070df44b4"
 
 # Cursor: focus existing instance (no -n). Set OPEN_NEW_CURSOR_ON_DOUBLE_CLAP for a new window as well.
 FOCUS_EXISTING_CURSOR_ON_DOUBLE_CLAP = True
@@ -1007,12 +1007,10 @@ def main() -> int:
     #         bu,
     #     )
     if OPEN_TECHNIRVANA_PORTAL_IN_CHROME:
-
       portal_url = (
           os.environ.get("TECHNIRVANA_PORTAL_URL")
           or "https://thetechnirvana.in"
       ).strip()
-
       log.info(  
           "After Spotify, open TechNirvana Portal in Chrome%s on monitor %d: %s",
           " fullscreen" if OPEN_CHROME_FULLSCREEN else "",
