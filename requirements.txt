@@ -3,3 +3,17 @@ sounddevice>=0.4.6,<0.6
 elevenlabs>=1.50,<3
 websockets>=13
 python-dotenv>=1.0,<2
+
+# --- Cerebro y voz de Jarvis (todo esto es gratis) -------------------------
+groq>=0.11,<1                # cerebro (Llama vía Groq, gratis)
+requests>=2.31,<3            # clima (Open-Meteo)
+ddgs>=9,<10                  # búsqueda en internet, sin clave
+fpdf2>=2.7,<3                # generar informes en PDF
+SpeechRecognition>=3.10,<4   # transcribir voz a texto (Google, sin clave)
+pyttsx3>=2.90,<3             # voz de respuesta offline, sin límite
+pyperclip>=1.8,<2            # leer el portapapeles
+flask>=3.0,<4                # servidor del dashboard
+
+# --- Solo Windows (control de volumen) -------------------------------------
+pycaw>=20230407; sys_platform == "win32"
+comtypes>=1.2; sys_platform == "win32"

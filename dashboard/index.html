@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>J.A.R.V.I.S.</title>
+<link rel="stylesheet" href="estilo.css" />
+</head>
+<body>
+  <div class="fondo-rejilla"></div>
+
+  <header class="encabezado">
+    <div class="marca">
+      <span class="marca-punto"></span>
+      <span class="marca-texto">J&nbsp;A&nbsp;R&nbsp;V&nbsp;I&nbsp;S</span>
+    </div>
+    <div class="reloj" id="reloj">--:--</div>
+  </header>
+
+  <main class="contenido">
+    <section class="panel-nucleo">
+      <div class="nucleo" id="nucleo">
+        <div class="anillo anillo-1"></div>
+        <div class="anillo anillo-2"></div>
+        <div class="anillo anillo-3"></div>
+        <div class="centro"></div>
+      </div>
+      <p class="estado-texto" id="estado-texto">EN LÍNEA</p>
+    </section>
+
+    <section class="panel-chat">
+      <div class="chat" id="chat">
+        <div class="mensaje jarvis">
+          <span class="etiqueta">JARVIS</span>
+          <p>Sistema listo. Dime algo o pregúntame lo que necesites.</p>
+        </div>
+      </div>
+
+      <form class="entrada" id="form-entrada" autocomplete="off">
+        <input
+          type="text"
+          id="campo-texto"
+          placeholder="Escríbele a Jarvis…"
+          autocomplete="off"
+        />
+        <button type="submit" aria-label="Enviar">➤</button>
+      </form>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
