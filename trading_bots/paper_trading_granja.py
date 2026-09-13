@@ -1,54 +1,49 @@
 """
-Granja Global / Radar Multiactiva - Paper trading endurecido.
+Granja Global / Radar Multiactiva — Paper trading con prácticas
+profesionales de gestión de riesgo (v2).
 
-Versión revisada de paper_trading_granja.py. Cambios principales frente al
-script original (detalle completo en trading_bots/AUDITORIA.md):
+Cambios frente a la v1 endurecida (ver AUDITORIA.md y ESTRATEGIA_PROFESIONAL.md
+para el detalle):
 
-  * Elimina el sesgo de "look-ahead" del original: la versión anterior leía
-    la variación YA OCURRIDA de un día completo y, si superaba el umbral,
-    anotaba una ganancia fija (+0.8%) EN EL MISMO INSTANTE, sin abrir ni
-    cerrar ninguna posición real en el tiempo. Eso hace que la simulación no
-    pueda perder nunca: no es una cuenta de resultados, es una fórmula que
-    siempre suma. Aquí una señal de momentum de HOY abre una posición que se
-    liquida en el CICLO SIGUIENTE al precio real de mercado, así que el
-    resultado puede ser positivo o negativo como en la vida real.
-  * Gestión de riesgo: tamaño de posición limitado por símbolo y exposición
-    total limitada como % del capital (el original "invertía" el 100% del
-    capital en cada uno de los 29 activos simultáneamente sin límite de
-    concentración, generando ganancias/pérdidas compuestas irreales).
-  * Circuit breaker de pérdida diaria: si las pérdidas del día superan un
-    umbral, se detiene la apertura de nuevas posiciones en ese ciclo.
-  * Persistencia en disco (capital, posiciones abiertas y bitácora de
-    operaciones) en vez de vivir solo en la variable global `CAPITAL_VIRTUAL`
-    en memoria de proceso: un reinicio del bot en el servidor ya no borra
-    el historial ni resetea el capital a 200.00.
-  * Comisión aplicada sobre el importe nocional de cada operación (entrada y
-    salida), no sobre el capital total acumulado como hacía el original.
-  * Manejo de errores por símbolo con reintentos y pausa entre solicitudes a
-    Yahoo Finance (yfinance limita/bloquea IPs que golpean la API sin pausas,
-    y el original no tenía backoff ni reintentos).
-  * Logging a archivo + consola en lugar de solo `print`.
+  * Entrada filtrada por TENDENCIA (solo se opera a favor de la SMA50 diaria)
+    en vez de reaccionar a cualquier variación diaria >1.5% sin contexto.
+  * Stop-loss y take-profit dimensionados por ATR (volatilidad real de cada
+    activo) con ratio riesgo:beneficio 1:2, verificados contra el rango
+    (high/low) real de cada vela — no solo el cierre — para no sobreestimar
+    resultados que la mecha del precio habría stopeado.
+  * Trailing stop: una vez que la posición avanza 1R a favor, el stop sube
+    para proteger ganancia.
+  * Tamaño de posición por riesgo fijo (1% del capital por operación) en vez
+    de exponer un % arbitrario de forma pareja.
+  * Circuit breaker de pérdida diaria Y de drawdown acumulado (antes solo
+    había pérdida diaria).
+  * Métricas de desempeño (win-rate, profit factor, expectancy, max
+    drawdown) recalculadas cada ciclo desde la bitácora real de operaciones.
+
+Sigue usando datos de Yahoo Finance vía `yfinance` y capital enteramente
+simulado — no envía órdenes reales.
 """
 
 from __future__ import annotations
 
-import csv
-import json
 import logging
 import os
 import signal
 import sys
 import time
-from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Optional
 
+import pandas as pd
 import yfinance as yf
 
+import posiciones as pos_mod
+import risk_engine as rk
+
 # ==========================================
-# CONFIGURACIÓN DE PAPER TRADING (SIMULACIÓN EN VIVO)
+# CONFIGURACIÓN
 # ==========================================
 CAPITAL_INICIAL = float(os.environ.get("PT_CAPITAL_INICIAL", "200.00"))
 SYMBOLS = [
@@ -57,20 +52,27 @@ SYMBOLS = [
     "NFLX", "AMD", "JNJ", "JPM", "V", "PG", "XOM", "DIS", "INTC"
 ]
 FEE_RATE = 0.001
-UMBRAL_ENTRADA_PCT = 0.015  # variación diaria mínima para considerar entrada
-
-# Gestión de riesgo / exposición.
-MAX_POSICION_PCT = 0.10       # tope por símbolo: 10% del capital
-MAX_EXPOSICION_TOTAL_PCT = 0.60  # tope agregado: 60% del capital invertido a la vez
-PERDIDA_DIARIA_MAX_PCT = 0.05    # circuit breaker: no abrir más posiciones si el día ya perdió 5%
+UMBRAL_ENTRADA_PCT = 0.015
+SMA_TENDENCIA = 50
+ATR_PERIODO = 14
+RIESGO_POR_OPERACION_PCT = 0.01
+STOP_ATR_MULT = 1.5
+RATIO_RIESGO_BENEFICIO = 2.0
+MAX_POSICION_PCT = 0.10
+MAX_EXPOSICION_TOTAL_PCT = 0.60
+PERDIDA_DIARIA_MAX_PCT = 0.05
+DRAWDOWN_MAX_PCT = 0.20
+HISTORIA_DIAS = "6mo"
 
 REINTENTOS_YFINANCE = 3
-PAUSA_ENTRE_SYMBOLS = 1.0  # segundos, para no golpear yfinance sin control
+PAUSA_ENTRE_SYMBOLS = 1.0
 CICLO_SEGUNDOS = 86400
+MIN_VELAS = SMA_TENDENCIA + 5
 
 DATA_DIR = Path(os.environ.get("PT_DATA_DIR", Path(__file__).with_name("paper_trading_data")))
 ESTADO_PATH = DATA_DIR / "estado.json"
 TRADES_LOG_PATH = DATA_DIR / "trades.csv"
+AUDITOR_DIR = Path(__file__).with_name("auditor_data")
 LOG_PATH = DATA_DIR / "paper_trading.log"
 
 logger = logging.getLogger("paper_trading")
@@ -80,223 +82,141 @@ def configurar_logging() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     logger.setLevel(logging.INFO)
     formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
-
     consola = logging.StreamHandler(sys.stdout)
     consola.setFormatter(formatter)
     logger.addHandler(consola)
-
     try:
         archivo = RotatingFileHandler(LOG_PATH, maxBytes=5_000_000, backupCount=5, encoding="utf-8")
         archivo.setFormatter(formatter)
         logger.addHandler(archivo)
     except OSError as exc:
-        logger.warning("No se pudo abrir el archivo de log %s: %s", LOG_PATH, exc)
+        logger.warning("No se pudo abrir el log %s: %s", LOG_PATH, exc)
 
 
-@dataclass
-class Posicion:
-    symbol: str
-    precio_entrada: float
-    monto_usd: float
-    fecha_apertura: str
-
-
-@dataclass
-class EstadoCuenta:
-    """Estado persistente de la cuenta de paper trading. En el script
-    original todo esto vivía en la variable global `CAPITAL_VIRTUAL`, sin
-    guardarse nunca a disco: cualquier reinicio del proceso (caída de la
-    sesión de `screen`, redeploy, reboot del servidor) volvía el capital a
-    $200.00 y borraba cualquier posición u operación en curso."""
-
-    capital: float = CAPITAL_INICIAL
-    posiciones: dict[str, Posicion] = field(default_factory=dict)
-
-    @classmethod
-    def cargar(cls, path: Path) -> "EstadoCuenta":
-        if not path.exists():
-            return cls()
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            posiciones = {
-                symbol: Posicion(**p) for symbol, p in data.get("posiciones", {}).items()
-            }
-            return cls(capital=data.get("capital", CAPITAL_INICIAL), posiciones=posiciones)
-        except (json.JSONDecodeError, OSError, TypeError) as exc:
-            logger.warning("Estado corrupto o ilegible en %s (%s); se reinicia con capital base.", path, exc)
-            return cls()
-
-    def guardar(self, path: Path) -> None:
-        tmp_path = path.with_suffix(".tmp")
-        data = {
-            "capital": self.capital,
-            "posiciones": {
-                symbol: {
-                    "symbol": p.symbol,
-                    "precio_entrada": p.precio_entrada,
-                    "monto_usd": p.monto_usd,
-                    "fecha_apertura": p.fecha_apertura,
-                }
-                for symbol, p in self.posiciones.items()
-            },
-        }
-        try:
-            tmp_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
-            tmp_path.replace(path)  # escritura atómica
-        except OSError as exc:
-            logger.warning("No se pudo persistir el estado en %s: %s", path, exc)
-
-    def exposicion_actual(self) -> float:
-        return sum(p.monto_usd for p in self.posiciones.values())
-
-
-def registrar_operacion(symbol: str, tipo: str, precio: float, monto_usd: float, pnl_usd: float, capital_resultante: float) -> None:
-    nuevo = not TRADES_LOG_PATH.exists()
-    try:
-        with TRADES_LOG_PATH.open("a", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            if nuevo:
-                writer.writerow(["timestamp", "symbol", "tipo", "precio", "monto_usd", "pnl_usd", "capital_resultante"])
-            writer.writerow([datetime.now(timezone.utc).isoformat(), symbol, tipo, f"{precio:.6f}", f"{monto_usd:.2f}", f"{pnl_usd:.4f}", f"{capital_resultante:.2f}"])
-    except OSError as exc:
-        logger.warning("No se pudo escribir la bitácora de operaciones: %s", exc)
-
-
-def obtener_precio_actual(symbol: str) -> tuple[Optional[float], Optional[float]]:
+def obtener_historial(symbol: str) -> Optional[pd.DataFrame]:
     for intento in range(1, REINTENTOS_YFINANCE + 1):
         try:
-            ticker = yf.Ticker(symbol)
-            df = ticker.history(period="2d", interval="1d")
-            if df is None or df.empty or len(df) < 2 or "Close" not in df:
-                logger.warning("Datos insuficientes de yfinance para %s (intento %d/%d).", symbol, intento, REINTENTOS_YFINANCE)
+            df = yf.Ticker(symbol).history(period=HISTORIA_DIAS, interval="1d")
+            if df is None or df.empty or len(df) < MIN_VELAS:
+                logger.warning("Historial insuficiente para %s (intento %d/%d).", symbol, intento, REINTENTOS_YFINANCE)
             else:
-                precio_actual = float(df['Close'].iloc[-1])
-                precio_anterior = float(df['Close'].iloc[-2])
-                return precio_actual, precio_anterior
+                df = df.rename(columns={"Open": "open", "High": "high", "Low": "low", "Close": "close"})
+                return df[["open", "high", "low", "close"]].astype(float)
         except Exception as exc:
-            logger.warning("Error descargando datos para %s (intento %d/%d): %s", symbol, intento, REINTENTOS_YFINANCE, exc)
-
+            logger.warning("Error descargando %s (intento %d/%d): %s", symbol, intento, REINTENTOS_YFINANCE, exc)
         if intento < REINTENTOS_YFINANCE:
-            time.sleep(2 ** intento)  # backoff exponencial: 2s, 4s, ...
+            time.sleep(2 ** intento)
+    logger.error("No se pudo obtener historial de %s tras %d intentos.", symbol, REINTENTOS_YFINANCE)
+    return None
 
-    logger.error("No se pudo obtener precio de %s tras %d intentos; se omite este ciclo.", symbol, REINTENTOS_YFINANCE)
-    return None, None
+
+def procesar_symbol(estado: pos_mod.EstadoCuenta, symbol: str) -> tuple[float, Optional[tuple[str, float, float]]]:
+    """Devuelve (pnl_realizado_hoy, candidata_entrada) donde candidata_entrada
+    es (symbol, precio, atr) o None."""
+    df = obtener_historial(symbol)
+    if df is None:
+        return 0.0, None
+
+    df["atr"] = rk.calcular_atr(df, ATR_PERIODO)
+    df["tendencia_alcista"] = rk.filtro_tendencia_alcista(df, SMA_TENDENCIA)
+
+    hoy = df.iloc[-1]
+    ayer = df.iloc[-2]
+    precio_actual, high, low = float(hoy["close"]), float(hoy["high"]), float(hoy["low"])
+    atr_actual = float(hoy["atr"]) if pd.notna(hoy["atr"]) else 0.0
+    cambio_pct = (precio_actual - float(ayer["close"])) / float(ayer["close"])
+
+    logger.info("-> %-10s | Cierre: %10.2f | Variacion: %+.2f%% | Tendencia alcista: %s", symbol, precio_actual, cambio_pct * 100, bool(hoy["tendencia_alcista"]))
+
+    pnl_hoy = 0.0
+    if symbol in estado.posiciones:
+        p = estado.posiciones[symbol]
+        cierre = pos_mod.evaluar_cierre_por_rango(p, high, low)
+        if cierre is not None:
+            precio_salida, motivo = cierre
+            pnl_hoy = pos_mod.cerrar_posicion(estado, symbol, precio_salida, motivo, TRADES_LOG_PATH, FEE_RATE)
+            logger.info("[CIERRE %s] %s @ %.4f -> pnl neto %+.2f USD", motivo, symbol, precio_salida, pnl_hoy)
+        else:
+            nuevo_stop = rk.actualizar_trailing_stop(precio_actual, p.precio_entrada, p.stop_loss, p.distancia_riesgo)
+            if nuevo_stop != p.stop_loss:
+                logger.info("[TRAILING] %s stop %.4f -> %.4f", symbol, p.stop_loss, nuevo_stop)
+                p.stop_loss = nuevo_stop
+        return pnl_hoy, None
+
+    if cambio_pct > UMBRAL_ENTRADA_PCT and bool(hoy["tendencia_alcista"]) and atr_actual > 0:
+        return pnl_hoy, (symbol, precio_actual, atr_actual)
+
+    return pnl_hoy, None
 
 
-def cerrar_posiciones_vencidas(estado: EstadoCuenta, precios_hoy: dict[str, float]) -> float:
-    """Liquida al precio REAL de hoy toda posición abierta en el ciclo
-    anterior. El resultado puede ser positivo o negativo: a diferencia del
-    original, aquí sí existe riesgo de pérdida."""
+def ejecutar_paper_trading(estado: pos_mod.EstadoCuenta) -> None:
+    logger.info("=" * 60)
+    logger.info("[PAPER TRADING] Capital: $%.2f | Posiciones abiertas: %d", estado.capital, len(estado.posiciones))
+    logger.info("=" * 60)
+
     pnl_dia = 0.0
-    for symbol in list(estado.posiciones.keys()):
-        precio_actual = precios_hoy.get(symbol)
-        if precio_actual is None:
-            continue  # sin dato hoy: se mantiene abierta e se reintenta el próximo ciclo
-        posicion = estado.posiciones.pop(symbol)
-        variacion = (precio_actual - posicion.precio_entrada) / posicion.precio_entrada
-        pnl_bruto = posicion.monto_usd * variacion
-        comision_salida = posicion.monto_usd * FEE_RATE
-        pnl_neto = pnl_bruto - comision_salida
-        estado.capital += pnl_neto
-        pnl_dia += pnl_neto
-        logger.info(
-            "[CIERRE] %s: entrada=%.4f salida=%.4f variacion=%+.2f%% pnl_neto=%+.2f USD",
-            symbol, posicion.precio_entrada, precio_actual, variacion * 100, pnl_neto,
-        )
-        registrar_operacion(symbol, "CIERRE", precio_actual, posicion.monto_usd, pnl_neto, estado.capital)
-    return pnl_dia
-
-
-def abrir_nuevas_posiciones(estado: EstadoCuenta, senales: dict[str, float], pnl_dia_hasta_ahora: float) -> None:
-    # Se fija el capital de referencia al inicio del ciclo de aperturas: si se
-    # recalculara `estado.capital * MAX_*_PCT` en cada iteración, el propio
-    # pago de comisiones de las posiciones ya abiertas ESE ciclo iría
-    # encogiendo el tope mientras se recorren las señales restantes, sin que
-    # eso refleje una reducción real del capital disponible para arriesgar.
-    capital_referencia = estado.capital
-    perdida_maxima_usd = capital_referencia * PERDIDA_DIARIA_MAX_PCT
-    if pnl_dia_hasta_ahora <= -perdida_maxima_usd:
-        logger.warning(
-            "Circuit breaker activado: pérdida del día (%+.2f USD) alcanzó el límite (%.2f USD). "
-            "No se abrirán nuevas posiciones en este ciclo.",
-            pnl_dia_hasta_ahora, perdida_maxima_usd,
-        )
-        return
-
-    tope_exposicion = capital_referencia * MAX_EXPOSICION_TOTAL_PCT
-    monto_por_posicion = capital_referencia * MAX_POSICION_PCT
-
-    for symbol, precio_actual in senales.items():
-        if symbol in estado.posiciones:
-            continue  # ya hay una posición abierta en este activo
-
-        exposicion_actual = estado.exposicion_actual()
-        if exposicion_actual >= tope_exposicion:
-            logger.info("Exposición total (%.2f) alcanzó el tope (%.2f); no se abren más posiciones este ciclo.", exposicion_actual, tope_exposicion)
-            break
-
-        monto = min(monto_por_posicion, tope_exposicion - exposicion_actual)
-        if monto <= 0:
-            continue
-
-        comision_entrada = monto * FEE_RATE
-        estado.capital -= comision_entrada
-        estado.posiciones[symbol] = Posicion(
-            symbol=symbol,
-            precio_entrada=precio_actual,
-            monto_usd=monto,
-            fecha_apertura=datetime.now(timezone.utc).isoformat(),
-        )
-        logger.info("[APERTURA] %s: entrada=%.4f monto=%.2f USD (comision=%.4f)", symbol, precio_actual, monto, comision_entrada)
-        registrar_operacion(symbol, "APERTURA", precio_actual, monto, -comision_entrada, estado.capital)
-
-
-def ejecutar_paper_trading(estado: EstadoCuenta) -> None:
-    logger.info("=" * 50)
-    logger.info("[PAPER TRADING EN VIVO] Capital actual: $%.2f USD | Posiciones abiertas: %d", estado.capital, len(estado.posiciones))
-    logger.info("=" * 50)
-
-    precios_hoy: dict[str, float] = {}
-    senales_entrada: dict[str, float] = {}
+    candidatas: list[tuple[str, float, float]] = []
 
     for symbol in SYMBOLS:
-        actual, anterior = obtener_precio_actual(symbol)
-        if actual is None or anterior is None:
-            continue
+        try:
+            pnl_symbol, candidata = procesar_symbol(estado, symbol)
+            pnl_dia += pnl_symbol
+            if candidata is not None:
+                candidatas.append(candidata)
+        except Exception:
+            logger.exception("Error procesando %s; se continua con el resto de la flota.", symbol)
+        time.sleep(PAUSA_ENTRE_SYMBOLS)
 
-        precios_hoy[symbol] = actual
-        cambio_pct = (actual - anterior) / anterior
-        logger.info("-> %-10s | Precio actual: %10.2f | Variacion: %+.2f%%", symbol, actual, cambio_pct * 100)
+    gestor = estado.gestor_riesgo(PERDIDA_DIARIA_MAX_PCT, DRAWDOWN_MAX_PCT)
+    permitido, razon = gestor.permite_nuevas_operaciones(estado.capital, pnl_dia)
+    estado.sincronizar_gestor_riesgo(gestor)
 
-        if cambio_pct > UMBRAL_ENTRADA_PCT:
-            senales_entrada[symbol] = actual
+    if not permitido:
+        logger.warning("Circuit breaker activo: %s. No se abren nuevas posiciones este ciclo.", razon)
+    else:
+        capital_referencia = estado.capital
+        # El auditor diario (auditor_granjas.py) puede reducir este
+        # multiplicador si detecta que el drawdown se acerca a su limite;
+        # se relee cada ciclo para que el ajuste tenga efecto de inmediato.
+        multiplicador_riesgo = pos_mod.leer_multiplicador_riesgo("paper_trading_granja", AUDITOR_DIR)
+        for symbol, precio, atr in candidatas:
+            abierto = pos_mod.abrir_posicion(
+                estado, symbol, precio, atr, TRADES_LOG_PATH, FEE_RATE,
+                RIESGO_POR_OPERACION_PCT * multiplicador_riesgo, STOP_ATR_MULT, RATIO_RIESGO_BENEFICIO,
+                MAX_POSICION_PCT, MAX_EXPOSICION_TOTAL_PCT, capital_referencia,
+            )
+            if abierto:
+                p = estado.posiciones[symbol]
+                logger.info("[APERTURA] %s @ %.4f | monto=%.2f | stop=%.4f | take=%.4f", symbol, precio, p.monto_usd, p.stop_loss, p.take_profit)
 
-        time.sleep(PAUSA_ENTRE_SYMBOLS)  # evita golpear yfinance sin pausas (riesgo de bloqueo/rate-limit)
-
-    pnl_dia = cerrar_posiciones_vencidas(estado, precios_hoy)
-    abrir_nuevas_posiciones(estado, senales_entrada, pnl_dia)
-
-    logger.info("[ESTADO] Ciclo completado. PnL realizado hoy: %+.2f USD", pnl_dia)
-    logger.info("Capital acumulado: $%.2f USD | Exposicion abierta: $%.2f USD", estado.capital, estado.exposicion_actual())
+    pnls_historicos = pos_mod.leer_pnl_operaciones_cerradas(TRADES_LOG_PATH)
+    metricas = rk.calcular_metricas(pnls_historicos, CAPITAL_INICIAL)
+    logger.info(
+        "[METRICAS] operaciones=%d win_rate=%.1f%% profit_factor=%s expectancy=%.3f USD max_dd=%.1f%% retorno_total=%.1f%%",
+        metricas.num_operaciones, metricas.win_rate * 100,
+        f"{metricas.profit_factor:.2f}" if metricas.profit_factor not in (None,) else "n/a",
+        metricas.expectancy_usd, metricas.max_drawdown_pct, metricas.retorno_total_pct,
+    )
+    logger.info("[ESTADO] PnL realizado hoy: %+.2f USD | Capital: $%.2f | Exposicion abierta: $%.2f",
+                pnl_dia, estado.capital, estado.exposicion_actual())
 
 
 def main() -> None:
     configurar_logging()
-    logger.info("INICIANDO MOTOR DE PAPER TRADING PARA LA GRANJA...")
+    logger.info("INICIANDO PAPER TRADING DE LA GRANJA GLOBAL (v2 - riesgo profesional)")
 
-    estado = EstadoCuenta.cargar(ESTADO_PATH)
-
+    estado = pos_mod.EstadoCuenta.cargar(ESTADO_PATH, CAPITAL_INICIAL)
     detener = {"flag": False}
 
     def _manejar_senal(signum, _frame):
-        logger.info("Señal %s recibida, se detiene tras el ciclo actual.", signum)
+        logger.info("Señal %s recibida, deteniendo tras el ciclo actual.", signum)
         detener["flag"] = True
 
     signal.signal(signal.SIGINT, _manejar_senal)
     signal.signal(signal.SIGTERM, _manejar_senal)
 
     while not detener["flag"]:
-        ciclo_inicio = time.monotonic()
+        inicio = time.monotonic()
         try:
             ejecutar_paper_trading(estado)
         except Exception:
@@ -304,10 +224,9 @@ def main() -> None:
         finally:
             estado.guardar(ESTADO_PATH)
 
-        transcurrido = time.monotonic() - ciclo_inicio
-        espera = max(0.0, CICLO_SEGUNDOS - transcurrido)
+        espera = max(0.0, CICLO_SEGUNDOS - (time.monotonic() - inicio))
         logger.info("Esperando %.0f segundos para el siguiente ciclo...", espera)
-        for _ in range(int(espera // 1)):
+        for _ in range(int(espera)):
             if detener["flag"]:
                 break
             time.sleep(1)
