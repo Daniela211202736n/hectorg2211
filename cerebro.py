@@ -44,9 +44,14 @@ load_dotenv(Path(__file__).resolve().parent / ".env")
 
 log = logging.getLogger("cerebro")
 
-GROQ_MODEL = (os.environ.get("GROQ_MODEL") or "llama-3.3-70b-versatile").strip()
+# Groq va cambiando/retirando nombres de modelo con el tiempo. Si en algún momento
+# vuelve a fallar con "model_not_found", corre esto en una terminal (con tu clave)
+# para ver los que están disponibles ahora y soportan "tools":
+#   curl https://api.groq.com/openai/v1/models -H "Authorization: Bearer TU_CLAVE"
+# y pon el nombre que quieras en GROQ_MODEL dentro del .env.
+GROQ_MODEL = (os.environ.get("GROQ_MODEL") or "openai/gpt-oss-120b").strip()
 GROQ_MODEL_RESPALDO = (
-    os.environ.get("GROQ_MODEL_RESPALDO") or "llama-3.1-8b-instant"
+    os.environ.get("GROQ_MODEL_RESPALDO") or "openai/gpt-oss-20b"
 ).strip()
 MAX_TURNOS_HERRAMIENTA = 6  # evita bucles infinitos de llamadas a herramientas
 MAX_MENSAJES_HISTORIAL = 20  # recorta el historial para no gastar tokens de más
