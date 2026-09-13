@@ -437,7 +437,10 @@ class Cerebro:
             )
         from groq import Groq
 
-        self._cliente = Groq(api_key=clave)
+        # Por defecto el cliente espera hasta 10 minutos antes de rendirse; con un
+        # límite corto, si algo se traba pasamos rápido al modelo de respaldo (o
+        # avisamos el error) en vez de dejar el dashboard pegado en "pensando".
+        self._cliente = Groq(api_key=clave, timeout=25.0, max_retries=1)
         return self._cliente
 
     def _recortar_historial(self) -> None:
