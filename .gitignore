@@ -8,3 +8,4 @@ trading_bots/backtest_data/
 trading_bots/*.log
 trading_bots/minigranja_state.json
 trading_bots/__pycache__/
+trading_bots/venv/
