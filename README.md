@@ -53,12 +53,19 @@ Se abre solo `http://localhost:8790` en tu navegador con el dashboard. Desde ah�
 Por defecto Jarvis usa:
 - **Reconocimiento de voz**: el servicio gratuito de Google (sin clave, sin
   límite práctico para uso personal).
-- **Voz de respuesta**: `pyttsx3`, offline, gratis y sin ningún límite (usa las
-  voces instaladas en Windows).
+- **Voz de respuesta**: **Edge TTS**, la misma voz neuronal gratuita que usa
+  "Leer en voz alta" del navegador Edge — mucho más natural que las voces
+  clásicas de Windows, sin clave y sin límite conocido para uso personal.
+  Cambia el acento/género con `JARVIS_VOZ_EDGE` en el `.env` (lista completa
+  con `edge-tts --list-voices`, busca las que empiezan por `es-`).
+- Mientras Jarvis habla, el micrófono se ignora automáticamente para que no se
+  escuche a sí mismo ni la respuesta se corte compitiendo por el audio.
+- Si no hay internet en ese momento, cae automáticamente a `pyttsx3` (offline,
+  más robótica, pero nunca deja a Jarvis mudo).
 
-Si quieres mejor calidad de voz y mejor precisión reconociendo lo que dices,
-puedes (opcional, no obligatorio) configurar
-[ElevenLabs](https://elevenlabs.io) en el `.env`:
+Si quieres mejor calidad todavía, puedes (opcional, no obligatorio) configurar
+[ElevenLabs](https://elevenlabs.io) en el `.env`, que tiene prioridad sobre
+Edge TTS cuando está configurado:
 
 ```env
 ELEVENLABS_API_KEY=tu_clave

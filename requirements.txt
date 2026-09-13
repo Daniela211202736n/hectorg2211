@@ -10,7 +10,9 @@ requests>=2.31,<3            # clima (Open-Meteo)
 ddgs>=9,<10                  # búsqueda en internet, sin clave
 fpdf2>=2.7,<3                # generar informes en PDF
 SpeechRecognition>=3.10,<4   # transcribir voz a texto (Google, sin clave)
-pyttsx3>=2.90,<3             # voz de respuesta offline, sin límite
+edge-tts>=6.1,<8             # voz de respuesta neuronal (gratis, sin clave)
+playsound<1.3                # reproducir la voz de Edge TTS (mp3)
+pyttsx3>=2.90,<3             # voz de respaldo offline si no hay internet
 pyperclip>=1.8,<2            # leer el portapapeles
 flask>=3.0,<4                # servidor del dashboard
 

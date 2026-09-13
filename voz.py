@@ -101,20 +101,75 @@ def sonido_no_escuche() -> None:
 
 _tts_lock = threading.Lock()
 
+# Voz neuronal gratis de Microsoft Edge (sin clave, sin límite conocido para uso
+# personal). Mucho más natural que las voces SAPI de Windows que usa pyttsx3.
+# Cambia esta en el .env con JARVIS_VOZ_EDGE si prefieres otra voz/acento:
+# lista completa con `edge-tts --list-voices` (busca las que empiezan por "es-").
+VOZ_EDGE_POR_DEFECTO = "es-CO-SalomeNeural"
+
+# Se activa mientras Jarvis está hablando, para que el micrófono no se escuche a
+# sí mismo (evita que la respuesta se "corte" por competir con la grabación y
+# evita que Jarvis se autoactive con su propia voz).
+_hablando = threading.Event()
+
+
+def esta_hablando() -> bool:
+    return _hablando.is_set()
+
 
 def hablar(texto: str) -> None:
-    """Voz por defecto: pyttsx3 (offline, gratis, sin límite). Usa ElevenLabs en su
-    lugar solo si dejaste su clave configurada (mejor calidad, opcional)."""
+    """Voz por defecto: Edge TTS (neuronal, gratis, natural). Si configuraste
+    ElevenLabs se usa esa (mejor calidad todavía); si no hay internet, cae a
+    pyttsx3 (offline, más robótica, pero nunca deja a Jarvis mudo)."""
     texto = (texto or "").strip()
     if not texto:
         return
     log.info("Jarvis: %s", texto)
 
-    clave_el = (os.environ.get("ELEVENLABS_API_KEY") or "").strip()
-    voz_el = (os.environ.get("ELEVENLABS_VOICE_ID") or "").strip()
-    if clave_el and voz_el and _hablar_elevenlabs(texto, clave_el, voz_el):
-        return
+    _hablando.set()
+    try:
+        clave_el = (os.environ.get("ELEVENLABS_API_KEY") or "").strip()
+        voz_el = (os.environ.get("ELEVENLABS_VOICE_ID") or "").strip()
+        if clave_el and voz_el and _hablar_elevenlabs(texto, clave_el, voz_el):
+            return
+        if _hablar_edge_tts(texto):
+            return
+        _hablar_pyttsx3(texto)
+    finally:
+        _hablando.clear()
 
+
+def _hablar_edge_tts(texto: str) -> bool:
+    import asyncio
+    import tempfile
+
+    try:
+        import edge_tts
+        from playsound import playsound
+    except ImportError:
+        return False
+
+    voz = (os.environ.get("JARVIS_VOZ_EDGE") or VOZ_EDGE_POR_DEFECTO).strip()
+    ruta_tmp = Path(tempfile.gettempdir()) / f"jarvis_voz_{os.getpid()}_{int(time.time() * 1000)}.mp3"
+    try:
+        async def _generar() -> None:
+            comunicador = edge_tts.Communicate(texto, voz)
+            await comunicador.save(str(ruta_tmp))
+
+        with _tts_lock:
+            asyncio.run(_generar())
+            if not ruta_tmp.is_file() or ruta_tmp.stat().st_size == 0:
+                return False
+            playsound(str(ruta_tmp))
+        return True
+    except Exception as e:  # noqa: BLE001
+        log.warning("Edge TTS falló (¿sin internet?), uso la voz local: %s", e)
+        return False
+    finally:
+        ruta_tmp.unlink(missing_ok=True)
+
+
+def _hablar_pyttsx3(texto: str) -> None:
     with _tts_lock:
         try:
             import pyttsx3
@@ -215,6 +270,11 @@ class EscuchaJarvis:
 
         while not self._detener.is_set():
             datos, _ = stream.read(blocksize)
+            if esta_hablando():
+                # Ignora el audio mientras Jarvis habla: si no, se escucharía a sí
+                # mismo (retroalimentación) y podría auto-activarse o cortar su
+                # propia respuesta al competir por el dispositivo de audio.
+                continue
             nivel = _rms(datos)
             bloques.append(datos.copy())
 
