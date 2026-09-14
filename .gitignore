@@ -1,11 +1,2 @@
 .env
 .cache/
-
-# Estado/logs/bitácoras generados en tiempo de ejecución por las granjas de trading
-trading_bots/*_data/
-trading_bots/auditor_data/
-trading_bots/backtest_data/
-trading_bots/*.log
-trading_bots/minigranja_state.json
-trading_bots/__pycache__/
-trading_bots/venv/
