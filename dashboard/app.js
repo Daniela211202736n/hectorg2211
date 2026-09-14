@@ -20,7 +20,7 @@ function agregarMensaje(rol, texto) {
   div.className = `mensaje ${rol === "usuario" ? "usuario" : "jarvis"}`;
   const etiqueta = document.createElement("span");
   etiqueta.className = "etiqueta";
-  etiqueta.textContent = rol === "usuario" ? "TÚ" : "JARVIS";
+  etiqueta.textContent = rol === "usuario" ? "TÚ" : "LUNA";
   const parrafo = document.createElement("p");
   parrafo.textContent = texto;
   div.appendChild(etiqueta);
@@ -63,7 +63,7 @@ async function enviarMensaje(texto) {
       body: JSON.stringify({ texto }),
     });
   } catch (e) {
-    agregarMensaje("jarvis", "No pude conectarme con el servidor de Jarvis.");
+    agregarMensaje("jarvis", "No pude conectarme con el servidor de Luna.");
     mensajesMostrados += 1;
   }
   consultarEstado();

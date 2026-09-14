@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Punto de entrada único de Jarvis: levanta el dashboard (navegador) y, al mismo
-tiempo, el oído (voz.py) escuchando "Jarvis" en segundo plano. Los dos caminos
+Punto de entrada único de Luna: levanta el dashboard (navegador) y, al mismo
+tiempo, el oído (voz.py) escuchando "Luna" en segundo plano. Los dos caminos
 —hablarle o escribirle en el dashboard— usan el mismo cerebro (cerebro.py) y
 comparten el mismo historial de conversación.
 
@@ -26,7 +26,8 @@ from flask import Flask, jsonify, request, send_from_directory
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
-from cerebro import Cerebro  # noqa: E402 - tras cargar el .env
+from cerebro import Cerebro, NOMBRE_ASISTENTE, NOMBRE_USUARIA  # noqa: E402 - tras cargar el .env
+import memoria  # noqa: E402
 import voz  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -34,6 +35,7 @@ log = logging.getLogger("servidor")
 
 PUERTO = int(os.environ.get("JARVIS_PUERTO", "8790"))
 CARPETA_DASHBOARD = Path(__file__).resolve().parent / "dashboard"
+INTERVALO_RECORDATORIOS_S = int(os.environ.get("JARVIS_INTERVALO_RECORDATORIOS", "60"))
 
 app = Flask(__name__, static_folder=None)
 
@@ -100,18 +102,43 @@ def _abrir_navegador_diferido(url: str) -> None:
         pass
 
 
+def _hilo_recordatorios() -> None:
+    """Revisa cada rato (sin usar el cerebro/Groq, así que no gasta nada):
+    - si es la primera vez que se habla hoy, saluda y resume los pendientes.
+    - si algún pendiente con hora ya se cumplió, avisa por voz una sola vez.
+    """
+    while True:
+        try:
+            if memoria.necesita_saludo_hoy():
+                resumen = memoria.resumen_pendientes_hoy()
+                saludo = f"Buenos días, {NOMBRE_USUARIA}. {resumen}"
+                _agregar_mensaje("jarvis", saludo)
+                voz.hablar(saludo)
+                memoria.registrar_saludo_hoy()
+
+            for pendiente in memoria.pendientes_por_avisar():
+                aviso = f"Recordatorio: {pendiente['texto']}"
+                _agregar_mensaje("jarvis", aviso)
+                voz.hablar(aviso)
+                memoria.marcar_avisado(pendiente["id"])
+        except Exception:  # noqa: BLE001 - este hilo nunca debe morir
+            log.exception("Fallo revisando recordatorios")
+        time.sleep(INTERVALO_RECORDATORIOS_S)
+
+
 def main() -> int:
     if not (os.environ.get("GROQ_API_KEY") or "").strip():
         log.warning(
-            "No hay GROQ_API_KEY configurada todavía: Jarvis abrirá, pero avisará que "
+            "No hay GROQ_API_KEY configurada todavía: Luna abrirá, pero avisará que "
             "le falta el cerebro hasta que pongas la clave en el archivo .env "
             "(sácala gratis en https://console.groq.com/keys)."
         )
 
     escucha.iniciar()
+    threading.Thread(target=_hilo_recordatorios, daemon=True).start()
 
     url = f"http://localhost:{PUERTO}"
-    log.info("Dashboard de Jarvis en %s", url)
+    log.info("Dashboard de %s en %s", NOMBRE_ASISTENTE, url)
     threading.Thread(target=_abrir_navegador_diferido, args=(url,), daemon=True).start()
 
     app.run(host="0.0.0.0", port=PUERTO, threaded=True)

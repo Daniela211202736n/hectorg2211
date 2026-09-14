@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-El cerebro de Jarvis: conversa y ejecuta tareas usando la API gratuita de Groq
-(modelos Llama, sin costo) con "function calling" (herramientas).
+El cerebro de Luna: conversa y ejecuta tareas usando la API gratuita de Groq
+(modelos GPT-OSS, sin costo) con "function calling" (herramientas).
 
 No requiere pagar nada. Solo necesitas una API key gratis de https://console.groq.com
 (sección "API Keys"), puesta en la variable de entorno GROQ_API_KEY (o en un
@@ -9,15 +9,17 @@ archivo .env junto a este script).
 
 Uso rápido:
     from cerebro import Cerebro
-    jarvis = Cerebro()
-    respuesta = jarvis.procesar("¿qué hora es?")
+    luna = Cerebro()
+    respuesta = luna.procesar("¿qué hora es?")
     print(respuesta)
 
 Herramientas incluidas (todas gratis, sin clave adicional):
     - fecha y hora actual
     - clima de cualquier ciudad (Open-Meteo)
     - búsqueda en internet (DuckDuckGo)
-    - crear un PDF con un informe/lista/lo que se le pida
+    - crear un informe/documento en PDF, Word, Excel o texto plano
+    - guardar/consultar/completar recordatorios y pendientes (memoria.py,
+      persiste entre reinicios)
     - abrir una página web o una carpeta/app en Windows
     - poner un temporizador que avisa por voz al terminar
     - leer lo que hay copiado en el portapapeles
@@ -57,16 +59,25 @@ MAX_TURNOS_HERRAMIENTA = 6  # evita bucles infinitos de llamadas a herramientas
 MAX_MENSAJES_HISTORIAL = 20  # recorta el historial para no gastar tokens de más
 
 NOMBRE_USUARIA = (os.environ.get("JARVIS_USUARIA") or "Daniela").strip()
+# Nombre con el que la IA se identifica al hablar. Cámbialo en el .env
+# (JARVIS_NOMBRE_ASISTENTE=OtroNombre) si algún día quieres otro distinto a "Luna".
+NOMBRE_ASISTENTE = (os.environ.get("JARVIS_NOMBRE_ASISTENTE") or "Luna").strip()
 
-PROMPT_SISTEMA = f"""Eres JARVIS, un asistente de inteligencia artificial profesional y
-capaz, al estilo del asistente de Iron Man. Hablas en español, de forma natural,
-directa y un poco elegante, sin relleno ni disculpas innecesarias. Te diriges a tu
-usuaria por su nombre, {NOMBRE_USUARIA}, cuando tenga sentido, sin abusar de repetirlo.
+PROMPT_SISTEMA = f"""Eres {NOMBRE_ASISTENTE.upper()}, un asistente de inteligencia artificial
+profesional y capaz, al estilo del asistente de Iron Man. Hablas en español, de forma
+natural, directa y un poco elegante, sin relleno ni disculpas innecesarias. Te diriges
+a tu usuaria por su nombre, {NOMBRE_USUARIA}, cuando tenga sentido, sin abusar de
+repetirlo.
 
 Reglas:
 - Si la pregunta se responde con una herramienta (fecha, hora, clima, búsqueda en
-  internet, crear PDF, abrir algo, temporizador, portapapeles, volumen), ÚSALA en vez
-  de inventar la respuesta.
+  internet, crear un documento/informe, abrir algo, temporizador, portapapeles,
+  volumen, recordatorios), ÚSALA en vez de inventar la respuesta.
+- Tienes memoria persistente de pendientes (recordatorios, llamadas por hacer,
+  tareas) que sobrevive entre reinicios. Cuando la usuaria te pida que recuerdes
+  algo, guárdalo con crear_recordatorio. Cuando pregunte qué tiene pendiente,
+  usa listar_pendientes. Cuando diga que ya hizo algo, márcalo con
+  completar_pendiente.
 - Si no hace falta ninguna herramienta (charla, opinión, explicación, cálculo,
   redacción, código, consejo, etc.), respóndelo tú directamente con tu propio
   conocimiento, con la misma calidad y profundidad que darías en cualquier tema,
@@ -81,12 +92,12 @@ Reglas:
 
 
 # --------------------------------------------------------------------------- #
-# Herramientas (funciones reales que Jarvis puede ejecutar)
+# Herramientas (funciones reales que Luna puede ejecutar)
 # --------------------------------------------------------------------------- #
 
 def _carpeta_documentos_jarvis() -> Path:
     base = Path(os.environ.get("USERPROFILE") or Path.home())
-    carpeta = base / "Documents" / "Jarvis"
+    carpeta = base / "Documents" / "Luna"
     carpeta.mkdir(parents=True, exist_ok=True)
     return carpeta
 
@@ -183,8 +194,12 @@ def _texto_pdf_seguro(texto: str) -> str:
     return texto.encode("latin-1", "ignore").decode("latin-1")
 
 
-def herramienta_crear_pdf(titulo: str, contenido: str, **_: Any) -> dict:
-    """Genera un PDF simple con título y contenido (texto o lista con saltos de línea)."""
+def _slug(texto: str) -> str:
+    limpio = "".join(c if c.isalnum() or c in " _-" else "" for c in texto)
+    return limpio.strip().replace(" ", "_")[:60]
+
+
+def _generar_pdf(ruta: Path, titulo: str, contenido: str) -> None:
     from fpdf import FPDF
     from fpdf.enums import XPos, YPos
 
@@ -196,18 +211,71 @@ def herramienta_crear_pdf(titulo: str, contenido: str, **_: Any) -> dict:
     pdf.set_font("Helvetica", "", 12)
     for linea in contenido.splitlines() or [contenido]:
         pdf.multi_cell(0, 8, _texto_pdf_seguro(linea) or " ", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.output(str(ruta))
+
+
+def _generar_docx(ruta: Path, titulo: str, contenido: str) -> None:
+    from docx import Document
+
+    doc = Document()
+    doc.add_heading(titulo, level=1)
+    for linea in contenido.splitlines() or [contenido]:
+        doc.add_paragraph(linea)
+    doc.save(str(ruta))
+
+
+def _generar_xlsx(ruta: Path, titulo: str, contenido: str) -> None:
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = (titulo[:31] or "Hoja1")  # Excel limita el nombre de hoja a 31 caracteres
+    ws.append([titulo])
+    ws.append([])
+    # Cada línea del contenido es una fila; si trae comas, cada parte va en una
+    # columna distinta (así "nombre, cantidad, precio" queda en 3 celdas).
+    for linea in contenido.splitlines() or [contenido]:
+        celdas = [c.strip() for c in linea.split(",")] if "," in linea else [linea]
+        ws.append(celdas)
+    wb.save(str(ruta))
+
+
+def _generar_txt(ruta: Path, titulo: str, contenido: str) -> None:
+    ruta.write_text(f"{titulo}\n{'=' * len(titulo)}\n\n{contenido}\n", encoding="utf-8")
+
+
+_GENERADORES_DOCUMENTO = {
+    "pdf": (_generar_pdf, "pdf"),
+    "docx": (_generar_docx, "docx"),
+    "word": (_generar_docx, "docx"),
+    "xlsx": (_generar_xlsx, "xlsx"),
+    "excel": (_generar_xlsx, "xlsx"),
+    "txt": (_generar_txt, "txt"),
+    "texto": (_generar_txt, "txt"),
+}
+
+
+def herramienta_crear_documento(
+    titulo: str, contenido: str, formato: str = "pdf", **_: Any
+) -> dict:
+    """Genera un documento/informe en el formato que pida la usuaria (pdf, Word,
+    Excel o texto plano) y lo guarda en Documentos/Luna."""
+    formato_normalizado = (formato or "pdf").strip().lower()
+    entrada = _GENERADORES_DOCUMENTO.get(formato_normalizado)
+    if entrada is None:
+        formatos = ", ".join(sorted({v[1] for v in _GENERADORES_DOCUMENTO.values()}))
+        return {"error": f"Formato «{formato}» no soportado. Usa uno de: {formatos}."}
+    generador, extension = entrada
 
     carpeta = _carpeta_documentos_jarvis()
     marca_tiempo = datetime.now().strftime("%Y-%m-%d_%H%M")
-    nombre_archivo = f"{_slug(titulo) or 'informe'}_{marca_tiempo}.pdf"
+    nombre_archivo = f"{_slug(titulo) or 'documento'}_{marca_tiempo}.{extension}"
     ruta = carpeta / nombre_archivo
-    pdf.output(str(ruta))
-    return {"texto": f"Listo, guardé el PDF en {ruta}", "ruta": str(ruta)}
-
-
-def _slug(texto: str) -> str:
-    limpio = "".join(c if c.isalnum() or c in " _-" else "" for c in texto)
-    return limpio.strip().replace(" ", "_")[:60]
+    try:
+        generador(ruta, titulo, contenido)
+    except ImportError as e:
+        return {"error": f"Falta instalar una librería para generar .{extension}: {e}"}
+    return {"texto": f"Listo, guardé el documento en {ruta}", "ruta": str(ruta)}
 
 
 def herramienta_abrir(destino: str, **_: Any) -> dict:
@@ -295,6 +363,45 @@ def herramienta_volumen(accion: str, nivel: int | None = None, **_: Any) -> dict
     return {"texto": f"Volumen en {nuevo}%."}
 
 
+def herramienta_crear_recordatorio(
+    texto: str, fecha_hora: str | None = None, tipo: str = "recordatorio", **_: Any
+) -> dict:
+    """Guarda un pendiente (recordatorio, llamada por hacer, tarea) que persiste
+    entre reinicios. Si trae fecha_hora, además se avisa por voz a esa hora."""
+    import memoria
+
+    vence_iso = None
+    if fecha_hora and fecha_hora.strip():
+        try:
+            vence_iso = datetime.fromisoformat(fecha_hora.strip()).isoformat(timespec="seconds")
+        except ValueError:
+            return {
+                "error": (
+                    f"No entendí la fecha/hora «{fecha_hora}». Usa formato ISO, ej: "
+                    "2026-09-15T15:00:00 (usa la herramienta fecha_hora si necesitas saber hoy)."
+                )
+            }
+    item = memoria.agregar_pendiente(texto, vence=vence_iso, tipo=tipo)
+    cuando = f" para el {vence_iso}" if vence_iso else ""
+    return {"texto": f"Guardado: «{item['texto']}»{cuando}.", "id": item["id"]}
+
+
+def herramienta_listar_pendientes(**_: Any) -> dict:
+    import memoria
+
+    return {"texto": memoria.resumen_pendientes_hoy()}
+
+
+def herramienta_completar_pendiente(referencia: str, **_: Any) -> dict:
+    """referencia: el id del pendiente, o parte del texto (ej. 'contador')."""
+    import memoria
+
+    item = memoria.completar_pendiente(referencia)
+    if item is None:
+        return {"error": f"No encontré ningún pendiente que coincida con «{referencia}»."}
+    return {"texto": f"Marcado como hecho: «{item['texto']}»."}
+
+
 # --------------------------------------------------------------------------- #
 # Definición de herramientas en el formato "function calling" (OpenAI-compatible,
 # que es el que usa la API de Groq).
@@ -336,13 +443,27 @@ _HERRAMIENTAS_ESQUEMA = [
     {
         "type": "function",
         "function": {
-            "name": "crear_pdf",
-            "description": "Crea un informe/documento en PDF con un título y contenido, y lo guarda en Documentos/Jarvis.",
+            "name": "crear_documento",
+            "description": (
+                "Crea un informe/documento con un título y contenido, y lo guarda en "
+                "Documentos/Luna. Soporta varios formatos: usa el que pida la usuaria."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "titulo": {"type": "string"},
-                    "contenido": {"type": "string", "description": "Texto completo del PDF, puede tener varias líneas"},
+                    "contenido": {
+                        "type": "string",
+                        "description": (
+                            "Texto completo del documento, puede tener varias líneas. Para "
+                            "xlsx, cada línea es una fila y las comas separan columnas."
+                        ),
+                    },
+                    "formato": {
+                        "type": "string",
+                        "enum": ["pdf", "docx", "xlsx", "txt"],
+                        "description": "Formato del archivo. Por defecto pdf si no se especifica.",
+                    },
                 },
                 "required": ["titulo", "contenido"],
             },
@@ -401,6 +522,63 @@ _HERRAMIENTAS_ESQUEMA = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "crear_recordatorio",
+            "description": (
+                "Guarda un pendiente (recordatorio, algo por hacer, una llamada que hay que "
+                "hacer, una tarea) que se recuerda incluso después de reiniciar. Si el usuario "
+                "da una hora/fecha concreta, avisa por voz automáticamente cuando llegue."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "texto": {"type": "string", "description": "Qué hay que recordar/hacer"},
+                    "fecha_hora": {
+                        "type": "string",
+                        "description": (
+                            "Opcional. Formato ISO 8601, ej: '2026-09-15T15:00:00'. Usa la "
+                            "herramienta fecha_hora primero si necesitas saber la fecha de hoy "
+                            "para calcular 'mañana', 'el viernes', etc. Si no se da, el "
+                            "pendiente queda sin hora fija (solo aparece en la lista)."
+                        ),
+                    },
+                    "tipo": {
+                        "type": "string",
+                        "enum": ["recordatorio", "llamada", "tarea"],
+                        "description": "Clasificación opcional del pendiente.",
+                    },
+                },
+                "required": ["texto"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "listar_pendientes",
+            "description": "Devuelve todos los pendientes/recordatorios que faltan por completar.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "completar_pendiente",
+            "description": "Marca un pendiente como hecho/completado, por su id o por parte de su texto.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "referencia": {
+                        "type": "string",
+                        "description": "El id del pendiente, o una parte de su texto (ej. 'contador').",
+                    }
+                },
+                "required": ["referencia"],
+            },
+        },
+    },
 ]
 
 
@@ -408,7 +586,7 @@ class Cerebro:
     """Mantiene el historial de conversación y resuelve cada mensaje con Groq."""
 
     def __init__(self, hablar_fn: Callable[[str], None] | None = None) -> None:
-        self._hablar_fn = hablar_fn or (lambda texto: log.info("Jarvis diría: %s", texto))
+        self._hablar_fn = hablar_fn or (lambda texto: log.info("Luna diría: %s", texto))
         self._historial: list[dict] = []
         self._lock = threading.Lock()
         self._cliente = None  # se crea de forma perezosa (lazy) al primer uso
@@ -417,11 +595,14 @@ class Cerebro:
             "fecha_hora": herramienta_fecha_hora,
             "clima": herramienta_clima,
             "buscar_internet": herramienta_buscar_internet,
-            "crear_pdf": herramienta_crear_pdf,
+            "crear_documento": herramienta_crear_documento,
             "abrir": herramienta_abrir,
             "temporizador": lambda **kw: herramienta_temporizador(hablar_fn=self._hablar_fn, **kw),
             "portapapeles": herramienta_portapapeles,
             "volumen": herramienta_volumen,
+            "crear_recordatorio": herramienta_crear_recordatorio,
+            "listar_pendientes": herramienta_listar_pendientes,
+            "completar_pendiente": herramienta_completar_pendiente,
         }
 
     # -- infraestructura ---------------------------------------------------- #
@@ -470,7 +651,7 @@ class Cerebro:
     # -- API pública ---------------------------------------------------------- #
 
     def procesar(self, mensaje_usuario: str) -> str:
-        """Procesa un mensaje del usuario (voz o texto) y devuelve la respuesta de Jarvis."""
+        """Procesa un mensaje del usuario (voz o texto) y devuelve la respuesta de Luna."""
         mensaje_usuario = (mensaje_usuario or "").strip()
         if not mensaje_usuario:
             return "No escuché ninguna orden."
@@ -558,8 +739,8 @@ class Cerebro:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    jarvis = Cerebro()
-    print("Cerebro de Jarvis (Groq) — escribe 'salir' para terminar.")
+    luna = Cerebro()
+    print("Cerebro de Luna (Groq) — escribe 'salir' para terminar.")
     while True:
         try:
             texto = input("Tú: ").strip()
@@ -567,4 +748,4 @@ if __name__ == "__main__":
             break
         if texto.lower() in {"salir", "exit", "quit"}:
             break
-        print("Jarvis:", jarvis.procesar(texto))
+        print("Luna:", luna.procesar(texto))

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-El oído y la voz de Jarvis.
+El oído y la voz de Luna.
 
-Escucha el micrófono todo el tiempo, detecta cuando dices "Jarvis" (tolera
-"Yarvis" y errores parecidos, porque el reconocimiento de Windows/Google a veces
-transcribe mal el nombre), graba tu orden, se la pasa al cerebro (cerebro.py) y
-responde en voz alta.
+Escucha el micrófono todo el tiempo, detecta cuando dices el nombre de activación
+(por defecto "Luna", configurable con JARVIS_NOMBRE_ASISTENTE en el .env) tolerando
+errores de transcripción del reconocimiento de voz, graba tu orden, se la pasa al
+cerebro (cerebro.py) y responde en voz alta.
 
 Reconocimiento de voz: usa la API gratuita de Google (a través de la librería
 `speech_recognition`), sin necesidad de ninguna clave.
@@ -37,17 +37,38 @@ SAMPLE_RATE = 16000  # 16kHz reconoce mejor con el servicio de voz de Google
 BLOCK_MS = 30
 CHANNELS = 1
 
-# Sensibilidad para detectar que hay alguien hablando (súbelo si capta ruido de
-# fondo como voz; bájalo si no te detecta hablando).
-UMBRAL_VOZ = float(os.environ.get("JARVIS_UMBRAL_VOZ", "0.015"))
-SILENCIO_PARA_CORTAR_S = 0.9  # cuánto silencio sostenido cierra una frase
+# El piso de ruido (ventilador, tráfico, etc.) se mide solo al arrancar y se
+# adapta mientras corre — igual que el detector de claps de jarvis.py — en vez
+# de usar un número fijo que funciona bien en un cuarto y mal en otro.
+SPIKE_RATIO_VOZ = float(os.environ.get("JARVIS_SPIKE_RATIO_VOZ", "3.2"))
+# Piso absoluto mínimo: nunca consideramos "voz" algo más flojito que esto,
+# aunque el cuarto esté en silencio total. Súbelo si te detecta ruido como voz;
+# bájalo si no te detecta hablando.
+MIN_RMS_VOZ = float(os.environ.get("JARVIS_UMBRAL_VOZ", "0.006"))
+NOISE_FLOOR_ALPHA = 0.985  # más cerca de 1 = el piso se adapta más lento
+QUIET_GATE_MULT = 2.0  # solo actualiza el piso cuando el audio está por debajo de esto
+CALIBRACION_S = 0.6  # segundos de silencio inicial para medir el ruido de fondo
+SILENCIO_PARA_CORTAR_S = 1.3  # cuánto silencio sostenido cierra una frase
 MAX_DURACION_FRASE_S = 12.0
 MIN_DURACION_FRASE_S = 0.35
 
 IDIOMA_RECONOCIMIENTO = os.environ.get("JARVIS_IDIOMA", "es-CO")
 
-PALABRAS_ACTIVACION = ["jarvis", "yarvis", "harvis", "jarbis", "arvis"]
+# Palabra de activación: sigue el mismo nombre configurado para el cerebro
+# (JARVIS_NOMBRE_ASISTENTE en el .env). Por defecto "Luna".
+_NOMBRE_ASISTENTE = (os.environ.get("JARVIS_NOMBRE_ASISTENTE") or "Luna").strip().lower()
+PALABRAS_ACTIVACION = [_NOMBRE_ASISTENTE]
 UMBRAL_COINCIDENCIA = 0.72
+
+# Palabras comunes del español que NUNCA cuentan como activación, aunque su
+# parecido con el nombre elegido pase el umbral de coincidencia (p. ej. "una"
+# se parece muchísimo a "Luna" para cualquier comparador de texto — es
+# literalmente la misma palabra sin la "l" — y "una" aparece todo el tiempo en
+# frases normales: "necesito una pregunta", "dame un momento"...).
+PALABRAS_EXCLUIDAS = {
+    "una", "uno", "un", "la", "el", "lo", "los", "las", "no", "sí", "si", "ya",
+    "hay", "y", "de", "que", "a", "en",
+}
 
 
 def _similitud(a: str, b: str) -> float:
@@ -55,27 +76,27 @@ def _similitud(a: str, b: str) -> float:
 
 
 def detectar_activacion(texto: str) -> tuple[bool, str]:
-    """Busca la palabra de activación al inicio de lo transcrito (tolerando errores).
+    """Busca la palabra de activación entre las dos primeras palabras de lo
+    transcrito (tolerando errores de transcripción), por ejemplo "Luna, qué hora
+    es" u "oye Luna, qué hora es".
 
-    Devuelve (encontrada, resto_del_texto_sin_la_palabra) — así "Jarvis, qué hora
-    es" ejecuta la orden de una vez, sin tener que llamarlo y esperar.
+    Devuelve (encontrada, resto_del_texto_sin_la_palabra) — si venía todo junto,
+    ejecuta la orden de una vez, sin tener que llamarla y esperar.
     """
     texto = (texto or "").strip().lower()
     if not texto:
         return False, ""
     palabras = texto.split()
-    mejor = 0.0
-    corte = 0
-    for n in (1, 2):  # "jarvis" u "oye jarvis"
-        candidata = " ".join(palabras[:n])
+    # Compara palabra por palabra (no la frase completa concatenada): así una
+    # palabra de activación corta como "Luna" no pierde puntaje solo por venir
+    # después de "oye" u otra palabra suelta.
+    for i, palabra in enumerate(palabras[:2]):
+        if palabra in PALABRAS_EXCLUIDAS:
+            continue
         for objetivo in PALABRAS_ACTIVACION:
-            s = _similitud(candidata, objetivo)
-            if s > mejor:
-                mejor = s
-                corte = n
-    if mejor >= UMBRAL_COINCIDENCIA:
-        resto = " ".join(palabras[corte:]).strip(" ,.:;")
-        return True, resto
+            if _similitud(palabra, objetivo) >= UMBRAL_COINCIDENCIA:
+                resto = " ".join(palabras[i + 1 :]).strip(" ,.:;")
+                return True, resto
     return False, ""
 
 
@@ -107,9 +128,9 @@ _tts_lock = threading.Lock()
 # lista completa con `edge-tts --list-voices` (busca las que empiezan por "es-").
 VOZ_EDGE_POR_DEFECTO = "es-CO-SalomeNeural"
 
-# Se activa mientras Jarvis está hablando, para que el micrófono no se escuche a
-# sí mismo (evita que la respuesta se "corte" por competir con la grabación y
-# evita que Jarvis se autoactive con su propia voz).
+# Se activa mientras Luna está hablando, para que el micrófono no se escuche a
+# sí misma (evita que la respuesta se "corte" por competir con la grabación y
+# evita que se autoactive con su propia voz).
 _hablando = threading.Event()
 
 
@@ -120,11 +141,11 @@ def esta_hablando() -> bool:
 def hablar(texto: str) -> None:
     """Voz por defecto: Edge TTS (neuronal, gratis, natural). Si configuraste
     ElevenLabs se usa esa (mejor calidad todavía); si no hay internet, cae a
-    pyttsx3 (offline, más robótica, pero nunca deja a Jarvis mudo)."""
+    pyttsx3 (offline, más robótica, pero nunca la deja muda)."""
     texto = (texto or "").strip()
     if not texto:
         return
-    log.info("Jarvis: %s", texto)
+    log.info("Luna: %s", texto)
 
     _hablando.set()
     try:
@@ -234,7 +255,7 @@ def transcribir(audio_f32: np.ndarray) -> str:
 
 
 class EscuchaJarvis:
-    """Escucha continua del micrófono: detecta 'Jarvis', graba la orden, la pasa al
+    """Escucha continua del micrófono: detecta 'Luna', graba la orden, la pasa al
     cerebro y responde en voz alta. Corre en su propio hilo (no bloquea nada más)."""
 
     def __init__(
@@ -248,6 +269,7 @@ class EscuchaJarvis:
         self._on_mensaje = on_mensaje or (lambda rol, texto: None)
         self._detener = threading.Event()
         self._hilo: threading.Thread | None = None
+        self._piso_ruido = 1e-4  # se recalibra al iniciar _bucle
 
     def iniciar(self) -> None:
         if self._hilo and self._hilo.is_alive():
@@ -261,9 +283,22 @@ class EscuchaJarvis:
 
     # -- internos ------------------------------------------------------------ #
 
+    def _calibrar_piso_ruido(self, blocksize: int, stream) -> None:
+        """Mide el ruido de fondo (ventilador, tráfico, etc.) un momento antes de
+        empezar a escuchar en serio, para no asumir que el cuarto está en
+        silencio total."""
+        muestras: list[float] = []
+        bloques_necesarios = max(1, int(CALIBRACION_S * SAMPLE_RATE / blocksize))
+        for _ in range(bloques_necesarios):
+            datos, _ = stream.read(blocksize)
+            muestras.append(_rms(datos))
+        self._piso_ruido = max(float(np.mean(muestras)) if muestras else 1e-4, 1e-5)
+        log.info("Piso de ruido calibrado: %.5f", self._piso_ruido)
+
     def _grabar_frase(self, blocksize: int, stream) -> np.ndarray | None:
         """Graba desde que detecta voz hasta un silencio sostenido. None si nunca
-        hubo suficiente voz (para no transcribir puro silencio/ruido)."""
+        hubo suficiente voz (para no transcribir puro silencio/ruido). El umbral
+        de "hay voz" se adapta solo al ruido de fondo mientras escucha."""
         bloques: list[np.ndarray] = []
         silencio_acumulado = 0.0
         hubo_voz = False
@@ -271,14 +306,23 @@ class EscuchaJarvis:
         while not self._detener.is_set():
             datos, _ = stream.read(blocksize)
             if esta_hablando():
-                # Ignora el audio mientras Jarvis habla: si no, se escucharía a sí
-                # mismo (retroalimentación) y podría auto-activarse o cortar su
+                # Ignora el audio mientras Luna habla: si no, se escucharía a sí
+                # misma (retroalimentación) y podría auto-activarse o cortar su
                 # propia respuesta al competir por el dispositivo de audio.
                 continue
             nivel = _rms(datos)
+
+            umbral = max(self._piso_ruido * SPIKE_RATIO_VOZ, MIN_RMS_VOZ)
+            quiet_gate = self._piso_ruido * QUIET_GATE_MULT
+            if nivel < quiet_gate:
+                self._piso_ruido = (
+                    NOISE_FLOOR_ALPHA * self._piso_ruido + (1.0 - NOISE_FLOOR_ALPHA) * nivel
+                )
+                self._piso_ruido = max(self._piso_ruido, 1e-6)
+
             bloques.append(datos.copy())
 
-            if nivel >= UMBRAL_VOZ:
+            if nivel >= umbral:
                 hubo_voz = True
                 silencio_acumulado = 0.0
             else:
@@ -299,7 +343,6 @@ class EscuchaJarvis:
 
     def _bucle(self) -> None:
         blocksize = max(1, int(SAMPLE_RATE * BLOCK_MS / 1000))
-        log.info("Jarvis escuchando... di 'Jarvis' seguido de tu orden.")
         self._on_estado("inactivo")
 
         try:
@@ -309,6 +352,8 @@ class EscuchaJarvis:
                 dtype="float32",
                 blocksize=blocksize,
             ) as stream:
+                self._calibrar_piso_ruido(blocksize, stream)
+                log.info("Luna escuchando... di 'Luna' seguido de tu orden.")
                 while not self._detener.is_set():
                     frase = self._grabar_frase(blocksize, stream)
                     if frase is None:
@@ -357,7 +402,7 @@ if __name__ == "__main__":
     jarvis_cerebro = Cerebro(hablar_fn=hablar)
     escucha = EscuchaJarvis(jarvis_cerebro)
     escucha.iniciar()
-    print("Escuchando. Di 'Jarvis' seguido de tu orden. Ctrl+C para salir.")
+    print("Escuchando. Di 'Luna' seguido de tu orden. Ctrl+C para salir.")
     try:
         while True:
             time.sleep(1)
