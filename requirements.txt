@@ -17,6 +17,7 @@ playsound<1.3                # reproducir la voz de Edge TTS (mp3)
 pyttsx3>=2.90,<3             # voz de respaldo offline si no hay internet
 pyperclip>=1.8,<2            # leer el portapapeles
 flask>=3.0,<4                # servidor del dashboard
+psutil>=5.9,<8                # estadísticas del sistema para el dashboard
 
 # --- Solo Windows (control de volumen) -------------------------------------
 pycaw>=20230407; sys_platform == "win32"

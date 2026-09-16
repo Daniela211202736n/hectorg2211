@@ -13,6 +13,10 @@ reinicies el computador, pone temporizadores, lee el portapapeles y controla
 el volumen (Windows). También puedes escribirle en el dashboard que se abre en
 el navegador.
 
+El dashboard además muestra en vivo: uso de CPU/RAM/disco, red, batería (si
+tienes laptop), el clima de tu ciudad, accesos rápidos a páginas comunes, y
+tus pendientes — todo sin gastar nada del cerebro/Groq.
+
 **El cerebro es gratis**: usa la API gratuita de [Groq](https://console.groq.com)
 con modelos abiertos (GPT-OSS). No es necesario pagar nada ni poner tarjeta.
 
@@ -152,6 +156,7 @@ momento, incluso sin haber hecho nada más.
 | `JARVIS_UMBRAL_VOZ` / `JARVIS_SPIKE_RATIO_VOZ` | Ajuste fino del oído si aun calibrando solo le cuesta escucharte. |
 | `JARVIS_INPUT_DEVICE` | Forzar un micrófono específico (índice o nombre). |
 | `JARVIS_INTERVALO_RECORDATORIOS` | Cada cuántos segundos revisa pendientes vencidos (por defecto 60). |
+| `JARVIS_CIUDAD_CLIMA` | Ciudad que muestra el widget de clima del dashboard (por defecto `Buga, Colombia`). |
 | `JARVIS_MAX_TOKENS_RESPUESTA` | Cuánto texto puede generar por respuesta (por defecto 4096). Súbelo si sientes las respuestas cortas/limitadas. |
 
 ### Solución de problemas

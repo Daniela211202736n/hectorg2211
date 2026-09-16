@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>LUNA</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌙</text></svg>" />
 <link rel="stylesheet" href="estilo.css" />
 </head>
 <body>
@@ -12,40 +13,138 @@
   <header class="encabezado">
     <div class="marca">
       <span class="marca-punto"></span>
-      <span class="marca-texto">L&nbsp;U&nbsp;N&nbsp;A</span>
+      <div>
+        <div class="marca-texto" id="marca-texto">L&nbsp;U&nbsp;N&nbsp;A</div>
+        <div class="marca-sub">Interfaz de asistencia personal</div>
+      </div>
     </div>
-    <div class="reloj" id="reloj">--:--</div>
+
+    <div class="indicadores" id="indicadores">
+      <span class="indicador" data-clave="nucleo"><i class="punto"></i>NÚCLEO <b>en línea</b></span>
+      <span class="indicador" data-clave="microfono"><i class="punto"></i>MICRÓFONO <b>—</b></span>
+      <span class="indicador" data-clave="voz"><i class="punto"></i>VOZ <b>—</b></span>
+      <span class="indicador" data-clave="ia"><i class="punto"></i>IA <b>—</b></span>
+    </div>
+
+    <div class="reloj-bloque">
+      <div class="reloj" id="reloj">--:--</div>
+      <div class="fecha" id="fecha">-</div>
+    </div>
   </header>
 
   <main class="contenido">
-    <section class="panel-nucleo">
-      <div class="nucleo" id="nucleo">
-        <div class="anillo anillo-1"></div>
-        <div class="anillo anillo-2"></div>
-        <div class="anillo anillo-3"></div>
-        <div class="centro"></div>
-      </div>
-      <p class="estado-texto" id="estado-texto">EN LÍNEA</p>
-    </section>
-
-    <section class="panel-chat">
-      <div class="chat" id="chat">
-        <div class="mensaje jarvis">
-          <span class="etiqueta">LUNA</span>
-          <p>Sistema listo. Dime algo o pregúntame lo que necesites.</p>
+    <aside class="columna columna-izq">
+      <section class="panel">
+        <h2><span class="punto-titulo"></span>SISTEMA</h2>
+        <div class="anillos" id="anillos-sistema">
+          <div class="anillo-stat" data-clave="cpu">
+            <svg viewBox="0 0 100 100"><circle class="fondo" cx="50" cy="50" r="42"></circle><circle class="progreso" cx="50" cy="50" r="42"></circle></svg>
+            <div class="anillo-valor"><b>--</b><small>%</small></div>
+            <div class="anillo-etiqueta">CPU</div>
+          </div>
+          <div class="anillo-stat" data-clave="ram">
+            <svg viewBox="0 0 100 100"><circle class="fondo" cx="50" cy="50" r="42"></circle><circle class="progreso" cx="50" cy="50" r="42"></circle></svg>
+            <div class="anillo-valor"><b>--</b><small>%</small></div>
+            <div class="anillo-etiqueta">RAM</div>
+          </div>
+          <div class="anillo-stat" data-clave="disco">
+            <svg viewBox="0 0 100 100"><circle class="fondo" cx="50" cy="50" r="42"></circle><circle class="progreso" cx="50" cy="50" r="42"></circle></svg>
+            <div class="anillo-valor"><b>--</b><small>%</small></div>
+            <div class="anillo-etiqueta">DISCO</div>
+          </div>
         </div>
+        <ul class="lista-datos" id="lista-sistema">
+          <li><span>Núcleos lógicos</span><b id="dato-nucleos">—</b></li>
+          <li><span>Memoria</span><b id="dato-memoria">—</b></li>
+          <li><span>Disco libre</span><b id="dato-disco">—</b></li>
+          <li><span>Encendido</span><b id="dato-encendido">—</b></li>
+        </ul>
+      </section>
+
+      <section class="panel" id="panel-bateria" hidden>
+        <h2><span class="punto-titulo"></span>ENERGÍA</h2>
+        <div class="barra-bateria"><div class="barra-bateria-relleno" id="bateria-relleno"></div></div>
+        <div class="bateria-texto" id="bateria-texto">—</div>
+      </section>
+
+      <section class="panel">
+        <h2><span class="punto-titulo"></span>RED</h2>
+        <div class="lista-datos">
+          <div class="red-fila"><span>▼ Bajada</span><b id="red-bajada">— KB/s</b></div>
+          <div class="red-fila"><span>▲ Subida</span><b id="red-subida">— KB/s</b></div>
+        </div>
+      </section>
+    </aside>
+
+    <section class="columna columna-centro">
+      <div class="panel-nucleo">
+        <div class="nucleo" id="nucleo">
+          <div class="anillo anillo-1"></div>
+          <div class="anillo anillo-2"></div>
+          <div class="anillo anillo-3"></div>
+          <div class="centro"></div>
+          <div class="onda" id="onda"></div>
+        </div>
+        <p class="estado-texto" id="estado-texto">EN LÍNEA</p>
+        <p class="saludo" id="saludo">Sistema listo, <span id="saludo-nombre">Daniela</span>.</p>
       </div>
 
-      <form class="entrada" id="form-entrada" autocomplete="off">
-        <input
-          type="text"
-          id="campo-texto"
-          placeholder="Escríbele a Luna…"
-          autocomplete="off"
-        />
-        <button type="submit" aria-label="Enviar">➤</button>
-      </form>
+      <div class="panel-chat">
+        <div class="chat-cabecera">
+          <span class="punto-titulo"></span>CONVERSACIÓN Y REGISTRO
+        </div>
+        <div class="chat" id="chat">
+          <div class="mensaje jarvis">
+            <span class="etiqueta">LUNA</span>
+            <p>Sistema listo. Dime algo o pregúntame lo que necesites.</p>
+          </div>
+        </div>
+
+        <form class="entrada" id="form-entrada" autocomplete="off">
+          <input
+            type="text"
+            id="campo-texto"
+            placeholder="Escríbele a Luna… (o di «Luna, …»)"
+            autocomplete="off"
+          />
+          <button type="submit" aria-label="Enviar">➤</button>
+        </form>
+      </div>
     </section>
+
+    <aside class="columna columna-der">
+      <section class="panel" id="panel-clima">
+        <h2><span class="punto-titulo"></span>CLIMA <span class="panel-sub" id="clima-lugar"></span></h2>
+        <div class="clima-cuerpo">
+          <div class="clima-icono" id="clima-icono">⛅</div>
+          <div class="clima-temp" id="clima-temp">--°</div>
+        </div>
+        <div class="clima-desc" id="clima-desc">—</div>
+        <ul class="lista-datos">
+          <li><span>Humedad</span><b id="clima-humedad">—</b></li>
+          <li><span>Viento</span><b id="clima-viento">—</b></li>
+        </ul>
+      </section>
+
+      <section class="panel">
+        <h2><span class="punto-titulo"></span>ACCESOS RÁPIDOS</h2>
+        <div class="accesos">
+          <a class="acceso" href="https://www.google.com" target="_blank" rel="noopener">🔍<span>Google</span></a>
+          <a class="acceso" href="https://www.youtube.com" target="_blank" rel="noopener">▶️<span>YouTube</span></a>
+          <a class="acceso" href="https://mail.google.com" target="_blank" rel="noopener">✉️<span>Gmail</span></a>
+          <a class="acceso" href="https://web.whatsapp.com" target="_blank" rel="noopener">💬<span>WhatsApp</span></a>
+          <a class="acceso" href="https://calendar.google.com" target="_blank" rel="noopener">📅<span>Calendario</span></a>
+          <a class="acceso" href="https://console.groq.com" target="_blank" rel="noopener">🧠<span>Groq</span></a>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2><span class="punto-titulo"></span>PENDIENTES</h2>
+        <ul class="lista-pendientes" id="lista-pendientes">
+          <li class="vacio">Sin pendientes por ahora.</li>
+        </ul>
+      </section>
+    </aside>
   </main>
 
   <script src="app.js"></script>

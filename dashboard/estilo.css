@@ -4,10 +4,12 @@
   --borde: #1c2b3a;
   --cian: #4ce0ff;
   --cian-suave: #4ce0ff55;
+  --purpura: #a06bff;
   --texto: #dff4ff;
   --texto-tenue: #7f97ac;
   --usuario: #7cf7c1;
   --peligro: #ff5c5c;
+  --ambar: #ffb54c;
 }
 
 * {
@@ -37,15 +39,20 @@ body {
     linear-gradient(var(--cian-suave) 1px, transparent 1px),
     linear-gradient(90deg, var(--cian-suave) 1px, transparent 1px);
   background-size: 42px 42px;
-  opacity: 0.08;
-  mask-image: radial-gradient(circle at 50% 30%, black, transparent 75%);
+  opacity: 0.06;
+  mask-image: radial-gradient(circle at 50% 20%, black, transparent 75%);
 }
+
+/* -- encabezado ------------------------------------------------------- */
 
 .encabezado {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 28px;
+  gap: 16px;
+  padding: 16px 24px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--borde);
 }
 
 .marca {
@@ -61,58 +68,278 @@ body {
   background: var(--cian);
   box-shadow: 0 0 12px 3px var(--cian);
   animation: parpadeo 2.4s ease-in-out infinite;
+  flex-shrink: 0;
 }
 
 .marca-texto {
-  font-size: 15px;
-  letter-spacing: 4px;
+  font-size: 17px;
+  letter-spacing: 3px;
+  color: var(--texto);
+  font-weight: 700;
+}
+
+.marca-sub {
+  font-size: 10px;
+  letter-spacing: 1.5px;
   color: var(--texto-tenue);
+  text-transform: uppercase;
+}
+
+.indicadores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--texto-tenue);
+}
+
+.indicador {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.indicador b {
+  color: var(--texto);
   font-weight: 600;
+}
+
+.indicador .punto {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--texto-tenue);
+  display: inline-block;
+}
+
+.indicador.activo .punto {
+  background: var(--cian);
+  box-shadow: 0 0 8px 2px var(--cian-suave);
+}
+
+.indicador.alerta .punto {
+  background: var(--peligro);
+  box-shadow: 0 0 8px 2px #ff5c5c55;
+}
+
+.reloj-bloque {
+  text-align: right;
 }
 
 .reloj {
   font-variant-numeric: tabular-nums;
-  color: var(--texto-tenue);
-  letter-spacing: 2px;
-  font-size: 14px;
+  font-size: 22px;
+  letter-spacing: 1px;
+  color: var(--texto);
 }
+
+.fecha {
+  font-size: 11px;
+  color: var(--texto-tenue);
+}
+
+/* -- layout de 3 columnas ---------------------------------------------- */
 
 .contenido {
   flex: 1;
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr) 280px;
+  gap: 18px;
+  padding: 18px 24px 24px;
+  align-items: start;
+}
+
+.columna {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 28px;
-  padding: 0 20px 24px;
-  width: 100%;
-  max-width: 720px;
-  margin: 0 auto;
+  gap: 16px;
+  min-width: 0;
 }
+
+.panel {
+  background: var(--fondo-panel);
+  border: 1px solid var(--borde);
+  border-radius: 14px;
+  padding: 14px 16px;
+  backdrop-filter: blur(6px);
+}
+
+.panel h2 {
+  margin: 0 0 12px;
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--texto-tenue);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.panel-sub {
+  font-weight: 400;
+  color: var(--cian);
+  letter-spacing: 0;
+  margin-left: auto;
+  font-size: 10px;
+}
+
+.punto-titulo {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--cian);
+  box-shadow: 0 0 6px 2px var(--cian-suave);
+  flex-shrink: 0;
+}
+
+.lista-datos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lista-datos li, .red-fila {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12.5px;
+}
+
+.lista-datos li span, .red-fila span {
+  color: var(--texto-tenue);
+}
+
+.lista-datos li b, .red-fila b {
+  font-variant-numeric: tabular-nums;
+}
+
+/* -- anillos de estadísticas -------------------------------------------- */
+
+.anillos {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.anillo-stat {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.anillo-stat svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.anillo-stat circle {
+  fill: none;
+  stroke-width: 8;
+}
+
+.anillo-stat .fondo {
+  stroke: #1c2b3a;
+}
+
+.anillo-stat .progreso {
+  stroke: var(--cian);
+  stroke-linecap: round;
+  stroke-dasharray: 264;
+  stroke-dashoffset: 264;
+  transition: stroke-dashoffset 0.6s ease, stroke 0.3s ease;
+}
+
+.anillo-stat[data-nivel="alto"] .progreso {
+  stroke: var(--peligro);
+}
+
+.anillo-stat[data-nivel="medio"] .progreso {
+  stroke: var(--ambar);
+}
+
+.anillo-valor {
+  position: absolute;
+  display: flex;
+  align-items: baseline;
+  gap: 1px;
+  font-variant-numeric: tabular-nums;
+}
+
+.anillo-valor b {
+  font-size: 15px;
+}
+
+.anillo-valor small {
+  font-size: 9px;
+  color: var(--texto-tenue);
+}
+
+.anillo-etiqueta {
+  position: absolute;
+  bottom: -16px;
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: var(--texto-tenue);
+}
+
+/* -- batería -------------------------------------------------------- */
+
+.barra-bateria {
+  height: 10px;
+  border-radius: 6px;
+  background: #101a26;
+  border: 1px solid var(--borde);
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.barra-bateria-relleno {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #2fce7a, #7cf7c1);
+  transition: width 0.6s ease;
+}
+
+.bateria-texto {
+  font-size: 12px;
+  color: var(--texto-tenue);
+}
+
+/* -- núcleo central ------------------------------------------------- */
 
 .panel-nucleo {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
-  padding-top: 8px;
+  gap: 10px;
+  padding-top: 4px;
 }
 
 .nucleo {
   position: relative;
-  width: 150px;
-  height: 150px;
+  width: 168px;
+  height: 168px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .centro {
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, #ffffff, var(--cian) 55%, #0b3a4a 100%);
   box-shadow: 0 0 24px 6px var(--cian-suave);
   transition: box-shadow 0.4s ease, background 0.4s ease;
+  z-index: 2;
 }
 
 .anillo {
@@ -121,14 +348,42 @@ body {
   border: 1px solid var(--cian-suave);
 }
 
-.anillo-1 { width: 80px; height: 80px; animation: girar 6s linear infinite; }
-.anillo-2 { width: 112px; height: 112px; animation: girar 10s linear infinite reverse; }
-.anillo-3 { width: 148px; height: 148px; animation: girar 16s linear infinite; opacity: 0.6; }
+.anillo-1 { width: 88px; height: 88px; animation: girar 6s linear infinite; }
+.anillo-2 { width: 124px; height: 124px; animation: girar 10s linear infinite reverse; }
+.anillo-3 { width: 164px; height: 164px; animation: girar 16s linear infinite; opacity: 0.55; }
+
+.onda {
+  position: absolute;
+  inset: -30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.onda::before, .onda::after {
+  content: "";
+}
+
+.nucleo.hablando .onda {
+  opacity: 1;
+}
+
+.nucleo.hablando .onda,
+.nucleo.escuchando .onda {
+  background-image: repeating-linear-gradient(
+    90deg, var(--cian-suave) 0 2px, transparent 2px 8px
+  );
+  border-radius: 50%;
+  animation: pulso-onda 1.2s ease-in-out infinite;
+}
 
 .nucleo.pensando .centro {
   animation: pulso 0.9s ease-in-out infinite;
-  background: radial-gradient(circle at 35% 30%, #fff, #ffd24c 55%, #4a3a0b 100%);
-  box-shadow: 0 0 26px 8px #ffd24c66;
+  background: radial-gradient(circle at 35% 30%, #fff, var(--ambar) 55%, #4a3a0b 100%);
+  box-shadow: 0 0 26px 8px #ffb54c66;
 }
 
 .nucleo.escuchando .centro {
@@ -138,8 +393,8 @@ body {
 
 .nucleo.hablando .centro {
   animation: pulso 0.5s ease-in-out infinite;
-  background: radial-gradient(circle at 35% 30%, #fff, #7cf7c1 55%, #0b4a2f 100%);
-  box-shadow: 0 0 26px 8px #7cf7c166;
+  background: radial-gradient(circle at 35% 30%, #fff, var(--purpura) 55%, #2a0b4a 100%);
+  box-shadow: 0 0 26px 8px #a06bff66;
 }
 
 .nucleo.error .centro {
@@ -154,45 +409,70 @@ body {
   color: var(--texto-tenue);
 }
 
+.saludo {
+  margin: 0;
+  font-size: 13px;
+  color: var(--texto-tenue);
+}
+
+.saludo span {
+  color: var(--cian);
+  font-weight: 600;
+}
+
+/* -- chat ------------------------------------------------------------ */
+
 .panel-chat {
-  width: 100%;
   flex: 1;
   display: flex;
   flex-direction: column;
   min-height: 0;
   background: var(--fondo-panel);
   border: 1px solid var(--borde);
-  border-radius: 18px;
+  border-radius: 14px;
   backdrop-filter: blur(6px);
   overflow: hidden;
+}
+
+.chat-cabecera {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--texto-tenue);
+  border-bottom: 1px solid var(--borde);
 }
 
 .chat {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   scroll-behavior: smooth;
+  min-height: 220px;
+  max-height: 46vh;
 }
 
 .mensaje {
-  max-width: 85%;
-  padding: 10px 14px;
-  border-radius: 12px;
+  max-width: 88%;
+  padding: 9px 13px;
+  border-radius: 10px;
   line-height: 1.45;
-  font-size: 14.5px;
+  font-size: 13.5px;
   animation: aparecer 0.25s ease-out;
 }
 
 .mensaje p {
-  margin: 4px 0 0;
+  margin: 3px 0 0;
   white-space: pre-wrap;
 }
 
 .mensaje .etiqueta {
-  font-size: 10px;
+  font-size: 9.5px;
   letter-spacing: 2px;
   color: var(--texto-tenue);
 }
@@ -220,7 +500,7 @@ body {
 .entrada {
   display: flex;
   gap: 10px;
-  padding: 14px;
+  padding: 12px;
   border-top: 1px solid var(--borde);
   background: #070b12;
 }
@@ -230,9 +510,9 @@ body {
   background: #0d1420;
   border: 1px solid var(--borde);
   border-radius: 10px;
-  padding: 12px 14px;
+  padding: 11px 13px;
   color: var(--texto);
-  font-size: 14px;
+  font-size: 13.5px;
   outline: none;
   transition: border-color 0.2s ease;
 }
@@ -242,12 +522,12 @@ body {
 }
 
 .entrada button {
-  width: 44px;
+  width: 42px;
   border: none;
   border-radius: 10px;
   background: linear-gradient(135deg, var(--cian), #1c7ca8);
   color: #061019;
-  font-size: 17px;
+  font-size: 16px;
   cursor: pointer;
   transition: transform 0.15s ease, filter 0.15s ease;
 }
@@ -257,6 +537,98 @@ body {
   transform: translateY(-1px);
 }
 
+/* -- clima ------------------------------------------------------------ */
+
+.clima-cuerpo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.clima-icono {
+  font-size: 34px;
+}
+
+.clima-temp {
+  font-size: 32px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.clima-desc {
+  font-size: 12px;
+  color: var(--texto-tenue);
+  margin-bottom: 12px;
+}
+
+/* -- accesos rápidos --------------------------------------------------- */
+
+.accesos {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.acceso {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 4px;
+  border-radius: 10px;
+  background: #0d1420;
+  border: 1px solid var(--borde);
+  color: var(--texto-tenue);
+  text-decoration: none;
+  font-size: 10px;
+  transition: border-color 0.2s ease, transform 0.15s ease;
+}
+
+.acceso:hover {
+  border-color: var(--cian);
+  transform: translateY(-2px);
+  color: var(--texto);
+}
+
+/* -- pendientes ------------------------------------------------------- */
+
+.lista-pendientes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.lista-pendientes li {
+  font-size: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #0d1420;
+  border: 1px solid var(--borde);
+  line-height: 1.4;
+}
+
+.lista-pendientes li.vacio {
+  color: var(--texto-tenue);
+  text-align: center;
+  background: none;
+  border: none;
+}
+
+.lista-pendientes .cuando {
+  display: block;
+  color: var(--cian);
+  font-size: 10.5px;
+  margin-top: 2px;
+}
+
+/* -- animaciones -------------------------------------------------------- */
+
 @keyframes girar {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
@@ -265,6 +637,11 @@ body {
 @keyframes pulso {
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.14); }
+}
+
+@keyframes pulso-onda {
+  0%, 100% { transform: scale(0.94); opacity: 0.5; }
+  50% { transform: scale(1.05); opacity: 0.9; }
 }
 
 @keyframes parpadeo {
@@ -277,11 +654,31 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* -- responsive --------------------------------------------------------- */
+
+@media (max-width: 1000px) {
+  .contenido {
+    grid-template-columns: 1fr;
+  }
+  .columna-izq, .columna-der {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .columna-izq .panel, .columna-der .panel {
+    flex: 1;
+    min-width: 220px;
+  }
+}
+
 @media (max-width: 480px) {
-  .encabezado { padding: 16px; }
-  .contenido { padding: 0 12px 16px; gap: 18px; }
-  .nucleo { width: 120px; height: 120px; }
-  .anillo-1 { width: 64px; height: 64px; }
-  .anillo-2 { width: 90px; height: 90px; }
-  .anillo-3 { width: 118px; height: 118px; }
+  .encabezado { padding: 14px 16px; }
+  .contenido { padding: 0 12px 16px; gap: 14px; }
+  .indicadores { display: none; }
+  .nucleo { width: 130px; height: 130px; }
+  .anillo-1 { width: 68px; height: 68px; }
+  .anillo-2 { width: 96px; height: 96px; }
+  .anillo-3 { width: 126px; height: 126px; }
+  .columna-izq .panel, .columna-der .panel {
+    min-width: 100%;
+  }
 }
