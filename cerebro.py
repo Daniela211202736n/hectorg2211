@@ -55,8 +55,13 @@ GROQ_MODEL = (os.environ.get("GROQ_MODEL") or "openai/gpt-oss-120b").strip()
 GROQ_MODEL_RESPALDO = (
     os.environ.get("GROQ_MODEL_RESPALDO") or "openai/gpt-oss-20b"
 ).strip()
-MAX_TURNOS_HERRAMIENTA = 6  # evita bucles infinitos de llamadas a herramientas
+MAX_TURNOS_HERRAMIENTA = 8  # evita bucles infinitos de llamadas a herramientas
 MAX_MENSAJES_HISTORIAL = 20  # recorta el historial para no gastar tokens de más
+# Los modelos gpt-oss "piensan" antes de responder (razonamiento interno), y eso
+# también consume del cupo de tokens. Con un cupo corto, la respuesta visible
+# podía quedar cortada/limitada. Estos modelos aguantan hasta 65536, así que
+# dejamos bastante margen.
+MAX_TOKENS_RESPUESTA = int(os.environ.get("JARVIS_MAX_TOKENS_RESPUESTA", "4096"))
 
 NOMBRE_USUARIA = (os.environ.get("JARVIS_USUARIA") or "Daniela").strip()
 # Nombre con el que la IA se identifica al hablar. Cámbialo en el .env
@@ -85,6 +90,12 @@ Reglas:
   genérica.
 - Sé conciso cuando la respuesta se va a leer en voz alta (unas pocas frases), y más
   detallado cuando la pregunta claramente pide detalle o la orden llegó escrita.
+  "Conciso" nunca significa recortar la respuesta a la mitad ni dar algo
+  genérico: completa la idea siempre.
+- Cuando la usuaria pida un informe, resumen, explicación larga, lista, o
+  cualquier tarea que claramente necesita desarrollo, dale una respuesta
+  completa y bien desarrollada, no un esbozo corto. Tienes espacio de sobra
+  para eso, úsalo.
 - Nunca digas que "no tienes cerebro" ni que te falta información básica: si algo no
   lo sabes con certeza, dilo claramente y ofrece cómo averiguarlo (por ejemplo, con
   la herramienta de búsqueda en internet).
@@ -645,7 +656,7 @@ class Cerebro:
             tools=_HERRAMIENTAS_ESQUEMA,
             tool_choice="auto",
             temperature=0.5,
-            max_tokens=1024,
+            max_tokens=MAX_TOKENS_RESPUESTA,
         )
 
     # -- API pública ---------------------------------------------------------- #

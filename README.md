@@ -152,6 +152,7 @@ momento, incluso sin haber hecho nada más.
 | `JARVIS_UMBRAL_VOZ` / `JARVIS_SPIKE_RATIO_VOZ` | Ajuste fino del oído si aun calibrando solo le cuesta escucharte. |
 | `JARVIS_INPUT_DEVICE` | Forzar un micrófono específico (índice o nombre). |
 | `JARVIS_INTERVALO_RECORDATORIOS` | Cada cuántos segundos revisa pendientes vencidos (por defecto 60). |
+| `JARVIS_MAX_TOKENS_RESPUESTA` | Cuánto texto puede generar por respuesta (por defecto 4096). Súbelo si sientes las respuestas cortas/limitadas. |
 
 ### Solución de problemas
 
@@ -162,8 +163,13 @@ momento, incluso sin haber hecho nada más.
   para ver cuáles hay activos ahora y soportan `"tools"`, y pon el que quieras
   en `GROQ_MODEL` dentro del `.env`.
 - **No te escucha bien / hay que repetir mucho**: el piso de ruido se calibra
-  solo, pero si sigue costando, baja `JARVIS_UMBRAL_VOZ` en el `.env` (por
-  ejemplo a `0.004`) y acércate más al micrófono.
+  solo (y de fábrica ya viene bastante sensible), pero si sigue costando, baja
+  `JARVIS_UMBRAL_VOZ` a `0.0015` y `JARVIS_SPIKE_RATIO_VOZ` a `1.6` en el
+  `.env`, y acércate más al micrófono. Revisa también en Windows que el
+  micrófono correcto esté puesto como predeterminado y que su volumen de
+  entrada no esté bajo (Configuración → Sonido → Entrada).
+- **Las respuestas o tareas quedan muy cortas/limitadas**: sube
+  `JARVIS_MAX_TOKENS_RESPUESTA` en el `.env` (por ejemplo a `8192`).
 - **El límite gratis de Groq se agotó**: espera al reinicio diario, o pon tu
   propia clave de respaldo cambiando `GROQ_MODEL_RESPALDO`.
 

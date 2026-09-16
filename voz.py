@@ -40,14 +40,19 @@ CHANNELS = 1
 # El piso de ruido (ventilador, tráfico, etc.) se mide solo al arrancar y se
 # adapta mientras corre — igual que el detector de claps de jarvis.py — en vez
 # de usar un número fijo que funciona bien en un cuarto y mal en otro.
-SPIKE_RATIO_VOZ = float(os.environ.get("JARVIS_SPIKE_RATIO_VOZ", "3.2"))
+# Nota: si en pruebas reales sigue sin escucharte, baja este número primero.
+SPIKE_RATIO_VOZ = float(os.environ.get("JARVIS_SPIKE_RATIO_VOZ", "2.0"))
 # Piso absoluto mínimo: nunca consideramos "voz" algo más flojito que esto,
 # aunque el cuarto esté en silencio total. Súbelo si te detecta ruido como voz;
 # bájalo si no te detecta hablando.
-MIN_RMS_VOZ = float(os.environ.get("JARVIS_UMBRAL_VOZ", "0.006"))
-NOISE_FLOOR_ALPHA = 0.985  # más cerca de 1 = el piso se adapta más lento
-QUIET_GATE_MULT = 2.0  # solo actualiza el piso cuando el audio está por debajo de esto
-CALIBRACION_S = 0.6  # segundos de silencio inicial para medir el ruido de fondo
+MIN_RMS_VOZ = float(os.environ.get("JARVIS_UMBRAL_VOZ", "0.0025"))
+# Techo del piso de ruido: si la calibración inicial cae justo en un momento
+# ruidoso (por ejemplo un sonido de Windows), esto evita que el umbral quede
+# clavado tan alto que ya no te detecte hablar en el resto de la sesión.
+PISO_RUIDO_MAX = 0.01
+NOISE_FLOOR_ALPHA = 0.97  # más cerca de 1 = el piso se adapta más lento
+QUIET_GATE_MULT = 1.6  # solo actualiza el piso cuando el audio está por debajo de esto
+CALIBRACION_S = 1.2  # segundos de silencio inicial para medir el ruido de fondo
 SILENCIO_PARA_CORTAR_S = 1.3  # cuánto silencio sostenido cierra una frase
 MAX_DURACION_FRASE_S = 12.0
 MIN_DURACION_FRASE_S = 0.35
@@ -286,13 +291,16 @@ class EscuchaJarvis:
     def _calibrar_piso_ruido(self, blocksize: int, stream) -> None:
         """Mide el ruido de fondo (ventilador, tráfico, etc.) un momento antes de
         empezar a escuchar en serio, para no asumir que el cuarto está en
-        silencio total."""
+        silencio total. Usa un percentil bajo (no el promedio) para que un
+        sonido pasajero durante la calibración (una notificación, una tos) no
+        deje el umbral pegado demasiado alto para el resto de la sesión."""
         muestras: list[float] = []
         bloques_necesarios = max(1, int(CALIBRACION_S * SAMPLE_RATE / blocksize))
         for _ in range(bloques_necesarios):
             datos, _ = stream.read(blocksize)
             muestras.append(_rms(datos))
-        self._piso_ruido = max(float(np.mean(muestras)) if muestras else 1e-4, 1e-5)
+        piso = float(np.percentile(muestras, 35)) if muestras else 1e-4
+        self._piso_ruido = min(max(piso, 1e-5), PISO_RUIDO_MAX)
         log.info("Piso de ruido calibrado: %.5f", self._piso_ruido)
 
     def _grabar_frase(self, blocksize: int, stream) -> np.ndarray | None:
@@ -318,7 +326,7 @@ class EscuchaJarvis:
                 self._piso_ruido = (
                     NOISE_FLOOR_ALPHA * self._piso_ruido + (1.0 - NOISE_FLOOR_ALPHA) * nivel
                 )
-                self._piso_ruido = max(self._piso_ruido, 1e-6)
+                self._piso_ruido = min(max(self._piso_ruido, 1e-6), PISO_RUIDO_MAX)
 
             bloques.append(datos.copy())
 
