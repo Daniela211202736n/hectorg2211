@@ -211,27 +211,69 @@ def _slug(texto: str) -> str:
 
 
 def _generar_pdf(ruta: Path, titulo: str, contenido: str) -> None:
+    """Interpreta un markdown simple ("# título", "## subtítulo", "- viñeta",
+    "**negrita**") para que el PDF salga con jerarquía visual real, en vez de
+    todo el texto plano en la misma fuente."""
     from fpdf import FPDF
     from fpdf.enums import XPos, YPos
 
     pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
-    pdf.set_font("Helvetica", "B", 16)
-    pdf.multi_cell(0, 10, _texto_pdf_seguro(titulo), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-    pdf.ln(4)
-    pdf.set_font("Helvetica", "", 12)
-    for linea in contenido.splitlines() or [contenido]:
-        pdf.multi_cell(0, 8, _texto_pdf_seguro(linea) or " ", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    margen_izq = pdf.l_margin
+
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.multi_cell(0, 11, _texto_pdf_seguro(titulo), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_draw_color(190, 190, 190)
+    pdf.line(margen_izq, pdf.get_y() + 1, pdf.w - pdf.r_margin, pdf.get_y() + 1)
+    pdf.ln(7)
+
+    pdf.set_font("Helvetica", "", 11.5)
+    for linea_original in contenido.splitlines() or [contenido]:
+        linea = _texto_pdf_seguro(linea_original).strip()
+        pdf.set_x(margen_izq)
+        if not linea:
+            pdf.ln(3)
+        elif linea.startswith("## "):
+            pdf.ln(2)
+            pdf.set_font("Helvetica", "B", 13.5)
+            pdf.multi_cell(0, 8, linea[3:].strip(), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            pdf.set_font("Helvetica", "", 11.5)
+        elif linea.startswith("# "):
+            pdf.ln(3)
+            pdf.set_font("Helvetica", "B", 15.5)
+            pdf.multi_cell(0, 9, linea[2:].strip(), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            pdf.set_font("Helvetica", "", 11.5)
+        elif linea.startswith(("- ", "* ")):
+            pdf.set_x(margen_izq + 5)
+            pdf.multi_cell(
+                0, 7, f"-  {linea[2:].strip()}", new_x=XPos.LMARGIN, new_y=YPos.NEXT, markdown=True
+            )
+        else:
+            pdf.multi_cell(0, 7, linea, new_x=XPos.LMARGIN, new_y=YPos.NEXT, markdown=True)
     pdf.output(str(ruta))
 
 
 def _generar_docx(ruta: Path, titulo: str, contenido: str) -> None:
+    """Mismo markdown simple que el PDF, usando los estilos nativos de Word
+    para títulos y viñetas (se ven bien automáticamente, sin que toquemos
+    fuentes a mano)."""
     from docx import Document
 
     doc = Document()
-    doc.add_heading(titulo, level=1)
-    for linea in contenido.splitlines() or [contenido]:
-        doc.add_paragraph(linea)
+    doc.add_heading(titulo, level=0)
+    for linea_original in contenido.splitlines() or [contenido]:
+        linea = linea_original.strip()
+        if not linea:
+            continue
+        if linea.startswith("## "):
+            doc.add_heading(linea[3:].strip(), level=2)
+        elif linea.startswith("# "):
+            doc.add_heading(linea[2:].strip(), level=1)
+        elif linea.startswith(("- ", "* ")):
+            doc.add_paragraph(linea[2:].strip(), style="List Bullet")
+        else:
+            doc.add_paragraph(linea)
     doc.save(str(ruta))
 
 
@@ -466,8 +508,13 @@ _HERRAMIENTAS_ESQUEMA = [
                     "contenido": {
                         "type": "string",
                         "description": (
-                            "Texto completo del documento, puede tener varias líneas. Para "
-                            "xlsx, cada línea es una fila y las comas separan columnas."
+                            "Texto completo del documento (pdf/docx/txt), desarrollado y "
+                            "completo, no un esbozo. Dale estructura real con este markdown "
+                            "simple: '# Título de sección' para secciones principales, "
+                            "'## Subtítulo' para subsecciones, '- ' al inicio de línea para "
+                            "viñetas, '**texto**' para negrita, y línea en blanco entre "
+                            "párrafos. Para xlsx, en cambio, cada línea es una fila de tabla "
+                            "y las comas separan columnas (sin usar el markdown anterior)."
                         ),
                     },
                     "formato": {

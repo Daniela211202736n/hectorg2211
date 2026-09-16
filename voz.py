@@ -375,45 +375,57 @@ class EscuchaJarvis:
                 self._calibrar_piso_ruido(blocksize, stream)
                 log.info("Luna escuchando... di 'Luna' seguido de tu orden.")
                 while not self._detener.is_set():
-                    frase = self._grabar_frase(blocksize, stream)
-                    if frase is None:
-                        continue
-
-                    texto = transcribir(frase)
-                    if not texto:
-                        continue
-
-                    activado, resto = detectar_activacion(texto)
-                    if not activado:
-                        continue
-                    self._activaciones += 1
-
-                    if resto:
-                        orden = resto
-                    else:
-                        sonido_te_escucho()
-                        self._on_estado("escuchando")
-                        frase_orden = self._grabar_frase(blocksize, stream)
-                        if frase_orden is None:
-                            sonido_no_escuche()
-                            self._on_estado("inactivo")
-                            continue
-                        orden = transcribir(frase_orden)
-                        if not orden:
-                            sonido_no_escuche()
-                            self._on_estado("inactivo")
-                            continue
-
-                    self._on_estado("pensando")
-                    self._on_mensaje("usuario", orden)
-                    respuesta = self._cerebro.procesar(orden)
-                    self._on_mensaje("jarvis", respuesta)
-                    self._on_estado("hablando")
-                    hablar(respuesta)
-                    self._on_estado("inactivo")
+                    try:
+                        self._ciclo_de_escucha(blocksize, stream)
+                    except sd.PortAudioError:
+                        raise  # error real de dispositivo: que lo maneje el except de abajo
+                    except Exception as e:  # noqa: BLE001 - un fallo no debe dejar a Luna muda
+                        log.exception("Error inesperado escuchando, sigo intentando: %s", e)
+                        self._on_estado("inactivo")
         except sd.PortAudioError as e:
             log.error("Error de audio: %s", e)
             self._on_estado("error")
+
+    def _ciclo_de_escucha(self, blocksize: int, stream) -> None:
+        """Una vuelta completa: espera la palabra de activación, graba la orden,
+        la procesa y responde. Separado de _bucle para poder envolverlo en un
+        try/except amplio sin que un error deje muerto el hilo entero."""
+        frase = self._grabar_frase(blocksize, stream)
+        if frase is None:
+            return
+
+        texto = transcribir(frase)
+        if not texto:
+            return
+
+        activado, resto = detectar_activacion(texto)
+        if not activado:
+            return
+        self._activaciones += 1
+
+        if resto:
+            orden = resto
+        else:
+            sonido_te_escucho()
+            self._on_estado("escuchando")
+            frase_orden = self._grabar_frase(blocksize, stream)
+            if frase_orden is None:
+                sonido_no_escuche()
+                self._on_estado("inactivo")
+                return
+            orden = transcribir(frase_orden)
+            if not orden:
+                sonido_no_escuche()
+                self._on_estado("inactivo")
+                return
+
+        self._on_estado("pensando")
+        self._on_mensaje("usuario", orden)
+        respuesta = self._cerebro.procesar(orden)
+        self._on_mensaje("jarvis", respuesta)
+        self._on_estado("hablando")
+        hablar(respuesta)
+        self._on_estado("inactivo")
 
 
 if __name__ == "__main__":
