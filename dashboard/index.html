@@ -68,7 +68,8 @@
       </section>
 
       <section class="panel">
-        <h2><span class="punto-titulo"></span>RED</h2>
+        <h2><span class="punto-titulo"></span>RED <span class="panel-sub">enlace activo</span></h2>
+        <canvas id="grafico-red" class="grafico-red" width="220" height="46"></canvas>
         <div class="lista-datos">
           <div class="red-fila"><span>▼ Bajada</span><b id="red-bajada">— KB/s</b></div>
           <div class="red-fila"><span>▲ Subida</span><b id="red-subida">— KB/s</b></div>
@@ -87,11 +88,21 @@
         </div>
         <p class="estado-texto" id="estado-texto">EN LÍNEA</p>
         <p class="saludo" id="saludo">Sistema listo, <span id="saludo-nombre">Daniela</span>.</p>
+
+        <div class="sensor-voz">
+          <span class="sensor-voz-etiqueta">SENSOR DE VOZ</span>
+          <div class="sensor-voz-barra">
+            <div class="sensor-voz-relleno" id="sensor-voz-relleno"></div>
+            <div class="sensor-voz-umbral" id="sensor-voz-umbral"></div>
+          </div>
+          <span class="sensor-voz-hint" id="sensor-voz-hint">di «Luna, …»</span>
+        </div>
       </div>
 
       <div class="panel-chat">
         <div class="chat-cabecera">
           <span class="punto-titulo"></span>CONVERSACIÓN Y REGISTRO
+          <span class="panel-sub" id="contador-interacciones">0 interacciones</span>
         </div>
         <div class="chat" id="chat">
           <div class="mensaje jarvis">
@@ -146,6 +157,12 @@
       </section>
     </aside>
   </main>
+
+  <footer class="pie">
+    <button type="button" class="boton-pie" id="btn-saludo">REPETIR SALUDO</button>
+    <button type="button" class="boton-pie" id="btn-pantalla-completa">PANTALLA COMPLETA</button>
+    <span class="pie-hint">F11 · salir de pantalla completa &nbsp;·&nbsp; Esc/Alt+F4 · cerrar</span>
+  </footer>
 
   <script src="app.js"></script>
 </body>

@@ -7,6 +7,10 @@ const form = document.getElementById("form-entrada");
 const campoTexto = document.getElementById("campo-texto");
 const indicadores = document.getElementById("indicadores");
 const saludoNombre = document.getElementById("saludo-nombre");
+const sensorVozRelleno = document.getElementById("sensor-voz-relleno");
+const sensorVozUmbral = document.getElementById("sensor-voz-umbral");
+const sensorVozHint = document.getElementById("sensor-voz-hint");
+const contadorInteracciones = document.getElementById("contador-interacciones");
 
 const ESTADOS = {
   inactivo: "EN LÍNEA",
@@ -55,12 +59,22 @@ function aplicarEstado(estado) {
   indMic.classList.toggle("activo", estado !== "error");
 }
 
+function actualizarSensorVoz(nivel, umbral) {
+  const referencia = Math.max((umbral || 0) * 4, 0.01);
+  const pct = Math.max(0, Math.min(100, ((nivel || 0) / referencia) * 100));
+  const pctUmbral = Math.max(0, Math.min(100, ((umbral || 0) / referencia) * 100));
+  sensorVozRelleno.style.width = `${pct}%`;
+  sensorVozUmbral.style.left = `${pctUmbral}%`;
+}
+
 async function consultarEstado() {
   try {
     const resp = await fetch("/api/estado");
     if (!resp.ok) return;
     const datos = await resp.json();
     aplicarEstado(datos.estado);
+    actualizarSensorVoz(datos.nivel_mic, datos.umbral_mic);
+    contadorInteracciones.textContent = `${datos.interacciones || 0} interacciones`;
 
     const mensajes = datos.mensajes || [];
     for (let i = mensajesMostrados; i < mensajes.length; i++) {
@@ -127,6 +141,7 @@ async function cargarConfig() {
     document.getElementById("marca-texto").textContent = nombreAsistente.split("").join(" ");
     saludoNombre.textContent = cfg.usuaria || "";
     campoTexto.placeholder = `Escríbele a ${cfg.nombre_asistente}… (o di «${cfg.nombre_asistente}, …»)`;
+    sensorVozHint.textContent = `di «${cfg.nombre_asistente}, …»`;
 
     const indVoz = indicadores.querySelector('[data-clave="voz"]');
     indVoz.querySelector("b").textContent = cfg.voz || "—";
@@ -202,12 +217,55 @@ async function consultarSistema() {
         const subida = Math.max(0, (s.red_subida_bytes - redAnterior.subida) / segundos);
         document.getElementById("red-bajada").textContent = formatoKBs(bajada);
         document.getElementById("red-subida").textContent = formatoKBs(subida);
+        registrarMuestraRed(bajada / 1024, subida / 1024);
       }
     }
     redAnterior = { bajada: s.red_bajada_bytes, subida: s.red_subida_bytes, ts: ahora };
   } catch (e) {
     // Reintenta en el próximo ciclo.
   }
+}
+
+// --------------------------------------------------------------------- //
+// Gráfico de red (canvas, sin librerías)
+// --------------------------------------------------------------------- //
+
+const historialRed = []; // últimas muestras en KB/s: { bajada, subida }
+const MAX_MUESTRAS_RED = 40;
+const canvasRed = document.getElementById("grafico-red");
+const ctxRed = canvasRed ? canvasRed.getContext("2d") : null;
+
+function registrarMuestraRed(bajadaKBs, subidaKBs) {
+  historialRed.push({ bajada: bajadaKBs, subida: subidaKBs });
+  if (historialRed.length > MAX_MUESTRAS_RED) historialRed.shift();
+  dibujarGraficoRed();
+}
+
+function dibujarGraficoRed() {
+  if (!ctxRed || historialRed.length < 2) return;
+  const w = canvasRed.width;
+  const h = canvasRed.height;
+  ctxRed.clearRect(0, 0, w, h);
+
+  const maxValor = Math.max(5, ...historialRed.map((m) => Math.max(m.bajada, m.subida)));
+  const paso = w / (MAX_MUESTRAS_RED - 1);
+  const offset = w - (historialRed.length - 1) * paso;
+
+  const trazar = (color, clave) => {
+    ctxRed.beginPath();
+    historialRed.forEach((m, i) => {
+      const x = offset + i * paso;
+      const y = h - (m[clave] / maxValor) * (h - 4) - 2;
+      if (i === 0) ctxRed.moveTo(x, y);
+      else ctxRed.lineTo(x, y);
+    });
+    ctxRed.strokeStyle = color;
+    ctxRed.lineWidth = 1.5;
+    ctxRed.stroke();
+  };
+
+  trazar("#4ce0ff", "bajada");
+  trazar("#a06bff", "subida");
 }
 
 // --------------------------------------------------------------------- //
@@ -259,21 +317,50 @@ async function consultarPendientes() {
     }
     for (const p of pendientes) {
       const li = document.createElement("li");
-      let html = p.texto;
+      li.appendChild(document.createTextNode(p.texto));
       if (p.vence) {
         const f = new Date(p.vence);
         const cuando = f.toLocaleString("es-CO", {
           day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
         });
-        html += `<span class="cuando">${cuando}</span>`;
+        const span = document.createElement("span");
+        span.className = "cuando";
+        span.textContent = cuando;
+        li.appendChild(span);
       }
-      li.innerHTML = html;
       lista.appendChild(li);
     }
   } catch (e) {
     // Reintenta en el próximo ciclo.
   }
 }
+
+// --------------------------------------------------------------------- //
+// Botones del pie
+// --------------------------------------------------------------------- //
+
+const btnSaludo = document.getElementById("btn-saludo");
+const btnPantallaCompleta = document.getElementById("btn-pantalla-completa");
+
+btnSaludo?.addEventListener("click", async () => {
+  btnSaludo.disabled = true;
+  try {
+    await fetch("/api/repetir_saludo", { method: "POST" });
+    consultarEstado();
+  } catch (e) {
+    // Sin conexión momentánea: no pasa nada, se puede reintentar.
+  } finally {
+    setTimeout(() => (btnSaludo.disabled = false), 1500);
+  }
+});
+
+btnPantallaCompleta?.addEventListener("click", () => {
+  if (document.fullscreenElement) {
+    document.exitFullscreen();
+  } else {
+    document.documentElement.requestFullscreen().catch(() => {});
+  }
+});
 
 // --------------------------------------------------------------------- //
 // Arranque

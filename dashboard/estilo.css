@@ -420,6 +420,102 @@ body {
   font-weight: 600;
 }
 
+/* -- sensor de voz en vivo ---------------------------------------------- */
+
+.sensor-voz {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 420px;
+  margin-top: 14px;
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--texto-tenue);
+}
+
+.sensor-voz-barra {
+  position: relative;
+  flex: 1;
+  height: 8px;
+  border-radius: 5px;
+  background: #101a26;
+  border: 1px solid var(--borde);
+  overflow: hidden;
+}
+
+.sensor-voz-relleno {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #1c7ca8, var(--cian));
+  transition: width 0.12s linear;
+}
+
+.sensor-voz-umbral {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  background: var(--ambar);
+  left: 30%;
+}
+
+.sensor-voz-hint {
+  white-space: nowrap;
+}
+
+/* -- red: gráfico ------------------------------------------------------- */
+
+.grafico-red {
+  display: block;
+  width: 100%;
+  height: 46px;
+  margin-bottom: 10px;
+}
+
+/* -- pie de página -------------------------------------------------------- */
+
+.pie {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 24px 20px;
+}
+
+.boton-pie {
+  padding: 9px 18px;
+  border-radius: 8px;
+  background: #0d1420;
+  border: 1px solid var(--borde);
+  color: var(--texto-tenue);
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.boton-pie:hover {
+  border-color: var(--cian);
+  color: var(--texto);
+}
+
+.pie-hint {
+  font-size: 10px;
+  color: var(--texto-tenue);
+  letter-spacing: 0.5px;
+  margin-left: auto;
+}
+
+@media (max-width: 700px) {
+  .pie-hint {
+    margin-left: 0;
+    width: 100%;
+    text-align: center;
+  }
+}
+
 /* -- chat ------------------------------------------------------------ */
 
 .panel-chat {

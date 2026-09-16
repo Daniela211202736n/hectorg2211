@@ -275,6 +275,17 @@ class EscuchaJarvis:
         self._detener = threading.Event()
         self._hilo: threading.Thread | None = None
         self._piso_ruido = 1e-4  # se recalibra al iniciar _bucle
+        self._nivel_mic = 0.0  # nivel de audio en vivo, para mostrar en el dashboard
+        self._activaciones = 0  # cuántas veces se activó por voz en esta sesión
+
+    def nivel_mic(self) -> float:
+        return self._nivel_mic
+
+    def umbral_actual(self) -> float:
+        return max(self._piso_ruido * SPIKE_RATIO_VOZ, MIN_RMS_VOZ)
+
+    def activaciones(self) -> int:
+        return self._activaciones
 
     def iniciar(self) -> None:
         if self._hilo and self._hilo.is_alive():
@@ -319,6 +330,7 @@ class EscuchaJarvis:
                 # propia respuesta al competir por el dispositivo de audio.
                 continue
             nivel = _rms(datos)
+            self._nivel_mic = nivel
 
             umbral = max(self._piso_ruido * SPIKE_RATIO_VOZ, MIN_RMS_VOZ)
             quiet_gate = self._piso_ruido * QUIET_GATE_MULT
@@ -374,6 +386,7 @@ class EscuchaJarvis:
                     activado, resto = detectar_activacion(texto)
                     if not activado:
                         continue
+                    self._activaciones += 1
 
                     if resto:
                         orden = resto

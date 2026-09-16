@@ -49,7 +49,7 @@ CLIMA_CACHE_S = 600  # el clima no cambia rápido: cachea 10 min para no golpear
 app = Flask(__name__, static_folder=None)
 
 _estado_lock = threading.Lock()
-_estado = {"estado": "inactivo", "mensajes": []}
+_estado = {"estado": "inactivo", "mensajes": [], "interacciones": 0}
 
 MAX_MENSAJES_DASHBOARD = 200
 
@@ -64,6 +64,8 @@ def _agregar_mensaje(rol: str, texto: str) -> None:
         _estado["mensajes"].append(
             {"rol": rol, "texto": texto, "hora": datetime.now().strftime("%H:%M")}
         )
+        if rol == "usuario":
+            _estado["interacciones"] += 1
         if len(_estado["mensajes"]) > MAX_MENSAJES_DASHBOARD:
             _estado["mensajes"] = _estado["mensajes"][-MAX_MENSAJES_DASHBOARD:]
 
@@ -85,7 +87,30 @@ def estaticos(ruta: str):
 @app.get("/api/estado")
 def api_estado():
     with _estado_lock:
-        return jsonify(dict(_estado))
+        datos = dict(_estado)
+    datos["nivel_mic"] = escucha.nivel_mic()
+    datos["umbral_mic"] = escucha.umbral_actual()
+    datos["activaciones_voz"] = escucha.activaciones()
+    return jsonify(datos)
+
+
+def _saludar(forzado: bool = False) -> bool:
+    """Habla y muestra el resumen de pendientes. Con forzado=True lo hace aunque
+    ya se haya saludado hoy (para el botón "Repetir saludo" del dashboard)."""
+    if not forzado and not memoria.necesita_saludo_hoy():
+        return False
+    resumen = memoria.resumen_pendientes_hoy()
+    saludo = f"Buenos días, {NOMBRE_USUARIA}. {resumen}"
+    _agregar_mensaje("jarvis", saludo)
+    voz.hablar(saludo)
+    memoria.registrar_saludo_hoy()
+    return True
+
+
+@app.post("/api/repetir_saludo")
+def api_repetir_saludo():
+    _saludar(forzado=True)
+    return jsonify({"ok": True})
 
 
 @app.get("/api/config")
@@ -199,12 +224,7 @@ def _hilo_recordatorios() -> None:
     """
     while True:
         try:
-            if memoria.necesita_saludo_hoy():
-                resumen = memoria.resumen_pendientes_hoy()
-                saludo = f"Buenos días, {NOMBRE_USUARIA}. {resumen}"
-                _agregar_mensaje("jarvis", saludo)
-                voz.hablar(saludo)
-                memoria.registrar_saludo_hoy()
+            _saludar()
 
             for pendiente in memoria.pendientes_por_avisar():
                 aviso = f"Recordatorio: {pendiente['texto']}"
