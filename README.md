@@ -46,7 +46,9 @@ python -m pip install -r requirements.txt
 python servidor.py
 ```
 
-Se abre solo `http://localhost:8790` en tu navegador con el dashboard. Desde ahí:
+Se abre solo el dashboard en `http://localhost:8790`, como una ventana de app
+(sin pestañas ni barra de direcciones, si tienes Chrome o Edge instalado) en
+vez de una pestaña normal. Desde ahí:
 
 - Di **"Luna"** en voz alta (el micrófono siempre está escuchando) y, tras el
   pitido ascendente, di tu orden. Si dices todo junto ("Luna, qué hora es") no

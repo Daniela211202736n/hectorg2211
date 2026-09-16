@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import logging
 import os
+import subprocess
+import sys
 import threading
 import time
 import webbrowser
@@ -82,6 +84,15 @@ def index():
 @app.get("/<path:ruta>")
 def estaticos(ruta: str):
     return send_from_directory(CARPETA_DASHBOARD, ruta)
+
+
+@app.after_request
+def _sin_cache(respuesta):
+    # El dashboard cambia seguido mientras lo seguimos mejorando: sin esto, el
+    # navegador podía quedarse con una versión vieja del HTML/JS/CSS aunque el
+    # archivo en disco ya estuviera actualizado.
+    respuesta.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    return respuesta
 
 
 @app.get("/api/estado")
@@ -209,8 +220,48 @@ def api_mensaje():
     return jsonify({"respuesta": respuesta})
 
 
+def _navegador_para_app() -> str | None:
+    """Busca Chrome o Edge para abrir el dashboard como una ventana de app
+    (sin pestañas ni barra de direcciones) en vez de una pestaña normal."""
+    if sys.platform == "win32":
+        candidatos = [
+            (os.environ.get("ProgramFiles", r"C:\Program Files"), "Google", "Chrome", "Application", "chrome.exe"),
+            (os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"), "Google", "Chrome", "Application", "chrome.exe"),
+            (os.environ.get("LOCALAPPDATA", ""), "Google", "Chrome", "Application", "chrome.exe"),
+            (os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"), "Microsoft", "Edge", "Application", "msedge.exe"),
+            (os.environ.get("ProgramFiles", r"C:\Program Files"), "Microsoft", "Edge", "Application", "msedge.exe"),
+        ]
+        for base, *partes in candidatos:
+            if not base:
+                continue
+            ruta = os.path.join(base, *partes)
+            if os.path.isfile(ruta):
+                return ruta
+        return None
+    import shutil
+
+    return shutil.which("google-chrome") or shutil.which("chromium") or shutil.which("microsoft-edge")
+
+
 def _abrir_navegador_diferido(url: str) -> None:
     time.sleep(1.0)
+    navegador = _navegador_para_app()
+    if navegador:
+        try:
+            popen_kw: dict = {
+                "stdin": subprocess.DEVNULL,
+                "stdout": subprocess.DEVNULL,
+                "stderr": subprocess.DEVNULL,
+            }
+            if sys.platform == "win32":
+                popen_kw["creationflags"] = subprocess.CREATE_NO_WINDOW
+            subprocess.Popen(
+                [navegador, f"--app={url}", "--window-size=1440,860"],
+                **popen_kw,
+            )
+            return
+        except OSError:
+            pass  # si falla, cae al navegador normal de abajo
     try:
         webbrowser.open(url)
     except Exception:  # noqa: BLE001
