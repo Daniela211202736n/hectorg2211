@@ -1,9 +1,0 @@
-.env
-runtime/
-logs/*.log
-logs/*.jsonl
-__pycache__/
-*.pyc
-.pytest_cache/
-.venv/
-venv/
